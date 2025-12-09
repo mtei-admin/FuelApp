@@ -1,0 +1,123 @@
+PROJECT: Fuel Requisition System (Streamlit + Python)
+TARGET PLATFORM: Local Windows Server (LAN + ZeroTier Access)
+USER: Jayson (Background in FileMaker Pro)
+AI ASSISTANT: Cursor AI
+
+================================================================================
+1. PROJECT OVERVIEW
+================================================================================
+We are building a multi-user, role-based Fuel Requisition application. 
+It replaces a manual process with a digital workflow: 
+Request -> Supervisor Approval -> PO Generation -> Receiving -> Invoice Reconciliation.
+
+TECH STACK:
+- Language: Python 3.9+
+- UI Framework: Streamlit
+- Database: SQLite (Local file-based). MUST use WAL mode for concurrency.
+- Security: bcrypt for password hashing (Never store plain text passwords).
+- PDF Generation: jinja2 + xhtml2pdf (HTML-to-PDF approach).
+- Network: Run on 0.0.0.0 for LAN and ZeroTier VPN visibility.
+
+================================================================================
+2. PROJECT STRUCTURE
+================================================================================
+We will use a clean 'src/' directory pattern to separate logic from configuration.
+
+fuel_app/
+|-- app.py               <-- MAIN ENTRY POINT (The "Startup Script")
+|-- init_admin.py        <-- Run ONCE to create the first Admin user
+|-- run_app.bat          <-- Double-click to start server
+|-- requirements.txt     <-- Library dependencies
+|-- roadmap.txt          <-- This file
+|
+|-- data/
+|   `-- fuel_system.db   <-- SQLite Database (Auto-created)
+|
+`-- src/                 <-- APPLICATION LOGIC
+    |-- __init__.py
+    |-- auth.py          <-- Login & Password Hashing
+    |-- database.py      <-- DB Connection & Init Script
+    |
+    |-- modules/         <-- UI SCREENS (Like FileMaker Layouts)
+    |   |-- __init__.py
+    |   |-- requests.py
+    |   |-- approvals.py
+    |   |-- purchasing.py
+    |   |-- billing.py
+    |   |-- master_data.py
+    |   `-- reports.py
+    |
+    `-- utils/           <-- HELPERS (Like FileMaker Scripts)
+        |-- __init__.py
+        `-- pdf_gen.py
+
+================================================================================
+3. ARCHITECTURE & RULES
+================================================================================
+
+DATABASE RULES (FileMaker-like Logic):
+1. Soft Deletes: Do not DELETE records from Master Data (Vendors/Cars/Users). 
+   Use an 'is_active' BOOLEAN column (1=Active, 0=Inactive).
+2. Concurrency: Enable Write-Ahead Logging (WAL) in 'src/database.py' to handle 
+   multiple users simultaneously.
+3. Foreign Keys: Store IDs, not names, in transaction tables 
+   (e.g., store 'vendor_id', not 'vendor_name').
+
+USER ROLES & PERMISSIONS:
+- User: Create Request, View Own History.
+- Supervisor: View Pending Requests, Approve/Reject.
+- Purchaser: View Approved Requests, Generate PO (PDF), Mark PO as "Received/Delivered".
+- Finance: View Received items, Reconcile with Vendor Invoice (Billing), 
+  Manage Master Data, Manage Users.
+
+================================================================================
+4. DEVELOPMENT PHASES (INSTRUCTIONS FOR CURSOR)
+================================================================================
+
+PHASE 1: SETUP & CORE (src/database.py)
+Goal: Initialize the project folders and database structure.
+- Action: Create 'requirements.txt' containing: streamlit, pandas, sqlite3, xhtml2pdf, jinja2, bcrypt.
+- Action: Create 'src/database.py'.
+- Prompt: "Create the SQLite initialization script in src/database.py. Ensure WAL mode is on. 
+  Create tables: users, vendors, cars, requisitions. All tables must have 'is_active' columns for soft deletes."
+
+PHASE 2: SECURITY & AUTHENTICATION (src/auth.py)
+Goal: Secure login system.
+- Action: Create 'src/auth.py'.
+- Logic: Implement hash_password(plain_text) and verify_password(plain_text, hash) using bcrypt.
+- Seed Script: Create 'init_admin.py' in the root. This script should ask for a password, 
+  hash it, and insert the first 'Finance' user so Jayson can log in.
+
+PHASE 3: THE APPLICATION SHELL (app.py)
+Goal: Navigation and Access Control.
+- Action: Create 'app.py' in the root.
+- Logic:
+  1. Import src.auth.
+  2. Check st.session_state.
+  3. If not logged in -> Show Login Form.
+  4. If logged in -> Show Sidebar Menu based on Role (e.g., if role == 'Supervisor': show_approvals).
+
+PHASE 4: CORE MODULES (CRUD)
+Goal: Build the UI screens in 'src/modules/'.
+- src/modules/master_data.py: Add/Edit Vendors & Cars (Handle soft deletes).
+- src/modules/requests.py: Form to submit fuel request (Auto-calc Total).
+- src/modules/approvals.py: Supervisor view (Data Editor for quick approvals).
+
+PHASE 5: PURCHASING & PDF
+Goal: Generate POs.
+- src/modules/purchasing.py: List Approved items. "Generate PO" button updates status.
+- src/utils/pdf_gen.py: Use jinja2 to render HTML template -> xhtml2pdf -> PDF bytes.
+
+PHASE 6: BILLING (RECONCILIATION)
+Goal: Finance matches Vendor Invoices to Received POs.
+- src/modules/billing.py:
+  1. Filter status='Received'.
+  2. User inputs Vendor Invoice #.
+  3. User selects rows via Checkbox.
+  4. Update rows to status='Billed' and save Invoice #.
+
+================================================================================
+5. DEPLOYMENT INSTRUCTIONS
+================================================================================
+- Create a 'run_app.bat' file for one-click launch on Windows.
+- Command: streamlit run app.py --server.address 0.0.0.0 --server.port 8501

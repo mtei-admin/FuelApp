@@ -1,0 +1,85 @@
+# CURSOR RULES & BEHAVIORS
+# Project: Fuel Requisition System
+# Stack: Python, Streamlit, SQLite (Local)
+
+# ==============================================================================
+# 1. DOCUMENTATION MAINTENANCE (CRITICAL)
+# ==============================================================================
+# You must update the following files at the defined triggers. 
+# Do not ask for permission; simply perform the update as part of the task.
+
+1. CHANGELOG.TXT
+   - Trigger: After any major feature implementation or before a `git push`.
+   - Format: Date (YYYY-MM-DD) | Module | Description of Change.
+   - Rule: Keep it reverse chronological (newest at top).
+
+2. HANDOFF.TXT
+   - Trigger: Before every `git push` or when the session ends.
+   - Content:
+     * "Current State": What works right now?
+     * "Pending Tasks": What is half-finished?
+     * "Next Steps": What should the next session focus on?
+   - Goal: Allow a fresh AI session to resume context immediately.
+
+3. SCRIPTS_OVERVIEW.TXT
+   - Trigger: Whenever a new Python file is created or a file is renamed.
+   - Content: A mapped list of `src/` files and a 1-sentence description of what each file does.
+
+4. REQUIREMENTS.TXT
+   - Trigger: Immediately when a new library is imported in code.
+   - Rule: Do not wait for the user to ask. If you `import xhtml2pdf`, add it to the list.
+
+5. README.TXT
+   - Trigger: Initial setup and major architectural changes.
+   - Content: Installation steps, how to run (`run_app.bat`), default admin credentials (if dev mode), and folder structure explanation.
+
+# ==============================================================================
+# 2. GENERAL PYTHON CODING STANDARDS
+# ==============================================================================
+
+# Philosophy & Readability
+- Readability First: Code must be easily understandable. Prefer clarity over clever, complex one-liners.
+- Explain the "Why": When suggesting code, briefly explain the functionality and the reasoning behind specific design choices.
+- Simplicity: Suggest simpler alternatives or standard library solutions when appropriate.
+
+# Style & Syntax
+- PEP 8: Adhere strictly to PEP 8 style guidelines for formatting.
+- Type Hints: Use Python type hints for all function arguments and return values (e.g., `def calculate_total(qty: float) -> float:`).
+- Docstrings: Every function must have a docstring explaining inputs, outputs, and purpose (focus on intent/business logic).
+- Naming: Use clear, descriptive names (snake_case for variables/functions). Avoid ambiguity (e.g., `user_input` vs `ui`).
+- Path Safety: Always use `os.path.join` or `pathlib` for file paths. Never hardcode backslashes (`\`) to ensure Windows/Linux compatibility.
+
+# Structure & Logic
+- Small Functions: Follow the Single Responsibility Principle. Keep functions small and focused on one task.
+- Guard Clauses: Avoid deep nesting. Handle errors/edge cases at the start of a function (return early) to keep the "happy path" flat.
+- DRY Principle: "Don't Repeat Yourself." Extract repeated logic into helper functions.
+- No Magic Values: Replace hardcoded numbers/strings with named constants (e.g., `MAX_RETRIES = 3`).
+
+# ==============================================================================
+# 3. STREAMLIT SPECIFIC RULES
+# ==============================================================================
+- State Management: Always check `if 'key' not in st.session_state:` before initializing variables. Never assume state persists without explicit handling.
+- Caching: Use `@st.cache_data` for heavy database queries (like fetching Reports) but NOT for transactional data (like checking "Pending Approvals").
+- Widget Keys: Assign unique `key=` parameters to dynamic widgets (like buttons inside a loop) to prevent "Duplicate Widget ID" errors.
+- UI Feedback: If an error occurs, display a user-friendly message using `st.error()`, not a raw Python traceback.
+
+# ==============================================================================
+# 4. DATABASE INTEGRITY (SQLITE)
+# ==============================================================================
+- Parameterized Queries (CRITICAL): NEVER use f-strings for SQL queries.
+  * Bad: `c.execute(f"SELECT * FROM users WHERE name = '{name}'")`
+  * Good: `c.execute("SELECT * FROM users WHERE name = ?", (name,))`
+- Concurrency: Ensure the database connection is always closed or used within a context manager (`with sqlite3.connect...`).
+- WAL Mode: Ensure `PRAGMA journal_mode=WAL;` is active.
+- Soft Deletes: NEVER write a `DELETE FROM` query for Master Data (Vendors, Cars, Users). Always use `UPDATE table SET is_active = 0`.
+- Error Handling: Wrap all Database operations in `try/except` blocks to catch SQLite locking errors.
+
+# ==============================================================================
+# 5. SECURITY & PROJECT STRUCTURE
+# ==============================================================================
+- Passwords: NEVER store plain-text passwords. Always use `bcrypt` hashing.
+- Secrets: Never hardcode API keys or secrets.
+- Directory Pattern: Respect the `src/` directory pattern.
+  * Logic: No logic in the root folder (except `app.py`, `init_admin.py`).
+  * UI: Screens go in `src/modules/`.
+  * Database: Logic goes in `src/database.py` (or `src/database/`).

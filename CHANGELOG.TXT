@@ -1,0 +1,18 @@
+2025-12-09 | Approvals & Timestamps | Fixed approval permissions: only Supervisors and Finance can approve/reject requests (Purchasers can view but not approve). Fixed timestamp handling to use local time instead of UTC for all created_at and updated_at fields.
+2025-12-09 | Form UX | Added keyboard navigation hints (Tab/Enter) and improved form field help text for better user experience in request form.
+2025-12-09 | Duplicate Prevention | Added session state tracking and submission hash to prevent duplicate form submissions in request form.
+2025-12-09 | Currency Symbol | Changed currency display from dollar sign ($) to peso sign (₱) throughout all UI modules and PDFs.
+2025-12-09 | Pricing & Auto-Calc | Added unit_price and total_price columns to requisitions table, implemented auto-calc total in request form (Phase 4), updated all UI modules to display pricing, enhanced PO PDFs with pricing, and added cost summaries to reports.
+2025-12-09 | User Management & Batch Billing | Added user management module for Finance role (create/edit/deactivate users), enhanced billing with checkbox-based batch selection per Phase 6 spec, and added user CRUD helpers to database.py.
+2025-12-09 | Dependencies | Removed sqlite3 from requirements (stdlib) and ensured bcrypt is installed.
+2025-12-09 | PO PDF Integration | Wired PO PDF generation into purchasing flow with download buttons and context handling.
+2025-12-09 | PDF Gen | Added PO PDF generation utility (jinja2 + xhtml2pdf) and documentation updates.
+2025-12-09 | Purchasing/Billing/Reports | Added PO/receiving/billing flows, requisition lifecycle helpers, reporting view, and docs updates.
+2025-12-09 | Requests/Approvals | Added requisition CRUD helpers, requests UI with history, approvals UI with approve/reject, and role-filtered navigation updates.
+2025-12-09 | Master Data CRUD | Implemented vendors/cars management UI with soft deletes, added DB helpers, and role-based navigation.
+2025-12-09 | Phase 3 Shell | Added Streamlit login shell with role-based navigation, run_app.bat launcher, and DB helpers; updated docs.
+2025-12-09 | Phase 2 (Auth Seed) | Implemented bcrypt hash/verify, added init_admin seeding script, and expanded script overview/docs.
+2025-12-09 | Structure | Added package markers, auth placeholder, UI module placeholders, utils/pdf_gen placeholder, and data folder.
+2025-12-09 | Phase 1 | Added core requirements, expanded database init with users/vendors/cars/requisitions, aligned DB filename, and updated docs.
+2025-12-09 | Initialization | Bootstrapped project structure with database setup and documentation.
+

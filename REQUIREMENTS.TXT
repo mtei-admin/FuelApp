@@ -1,0 +1,7 @@
+streamlit
+pandas
+xhtml2pdf
+jinja2
+bcrypt
+pytest
+

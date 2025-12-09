@@ -1,0 +1,16 @@
+- app.py: Entry point that ensures the SQLite database is initialized at startup.
+- init_admin.py: CLI helper to seed or update the Finance admin user.
+- src/__init__.py: Package marker for core application code.
+- src/auth.py: Authentication helpers (bcrypt hash/verify).
+- src/database.py: Initializes the SQLite database, sets WAL/foreign keys, creates users/vendors/cars/requisitions tables, and provides CRUD helpers (users/vendors/cars/requisitions lifecycle).
+- src/modules/__init__.py: Package marker for UI modules.
+- src/modules/master_data.py: Vendors and cars management UI (create/reactivate, soft delete).
+- src/modules/requests.py: Fuel request submission UI with history for the user.
+- src/modules/approvals.py: Supervisor approvals UI with approve/reject actions.
+- src/modules/purchasing.py: PO generation and receiving UI for approved requests.
+- src/modules/billing.py: Billing UI with checkbox-based batch selection to mark received items as billed with invoice #.
+- src/modules/reports.py: Simple status-based reporting view.
+- src/modules/user_management.py: User management UI for Finance role (create/edit/deactivate users).
+- src/utils/__init__.py: Package marker for utility helpers.
+- src/utils/pdf_gen.py: Purchase order PDF rendering (jinja2 + xhtml2pdf).
+

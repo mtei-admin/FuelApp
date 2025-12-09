@@ -1,0 +1,23 @@
+Current State:
+- Phase 1: requirements listed (streamlit, pandas, sqlite3, xhtml2pdf, jinja2, bcrypt); `app.py` initializes `data/fuel_system.db`; `src/database.py` enables WAL/foreign keys and creates users, vendors, cars, requisitions tables with `is_active`.
+- Phase 2: `src/auth.py` hashes/verifies via bcrypt; `init_admin.py` seeds or updates Finance admin with hashed password.
+- Phase 3 shell: `app.py` runs Streamlit login/session shell with role-based navigation; uses DB helper to fetch user and verify via bcrypt; logout supported; role filtering added for pages.
+- Master data: `src/modules/master_data.py` implements vendors/cars create/reactivate and soft delete; DB helpers added for list/upsert/deactivate vendors/cars.
+- Requests/Approvals: `src/database.py` includes requisition CRUD helpers; `src/modules/requests.py` submits requests and shows user history; `src/modules/approvals.py` lists pending and supports approve/reject (role-gated).
+- Purchasing/Billing/Reports: `src/database.py` now supports PO/receiving/billing fields and pricing (unit_price, total_price); purchasing module handles PO generation/receiving with pricing display; billing uses checkbox-based batch selection to mark received items as billed with invoice # (per Phase 6 spec); reports show status-based summaries with cost totals.
+- Pricing & Auto-Calc: `src/database.py` includes unit_price and total_price columns (migrated via _ensure_requisition_columns); `src/modules/requests.py` implements auto-calc total feature (Phase 4) with unit price input; all UI modules display pricing; PO PDFs include pricing columns; reports show cost summaries and grand total.
+- User Management: `src/modules/user_management.py` provides Finance role with full user CRUD (create/edit/deactivate/reactivate); `src/database.py` includes user management helpers (list_users, create_user, update_user, soft_delete_user, reactivate_user).
+- PDF: `src/utils/pdf_gen.py` renders PO HTML/PDF via jinja2 + xhtml2pdf; purchasing flow now offers PO PDF download when generating or viewing PO-generated items.
+- Structure: package markers; UI modules present; `data/` directory; `run_app.bat` launches Streamlit on 0.0.0.0:8501.
+- Documentation updated: CHANGELOG, REQUIREMENTS, SCRIPTS_OVERVIEW, README reflect current setup; sqlite3 removed from requirements (stdlib).
+
+Pending Tasks:
+- Style PO PDF template further; optionally persist PDFs to disk or DB if needed.
+- Add data validation and tests around auth, DB operations, and status transitions.
+- Expand reporting with exports/filters (date ranges, CSV export) and add role-based guarding within modules.
+
+Next Steps:
+- Add more detailed billing data (e.g., invoice amounts/dates) if needed.
+- Harden role checks and add unit tests for DB helpers and auth flows.
+- Enhance reporting with date range filters, CSV export, and more detailed summaries.
+

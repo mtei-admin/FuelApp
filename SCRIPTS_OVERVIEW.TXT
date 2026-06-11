@@ -2,11 +2,12 @@
 - init_admin.py: CLI helper to seed or update the Finance admin user.
 - src/__init__.py: Package marker for core application code.
 - src/auth.py: Authentication helpers (bcrypt hash/verify).
-- src/database.py: Initializes the SQLite database, sets WAL/foreign keys, creates users/vendors/cars/requisitions tables, and provides CRUD helpers (users/vendors/cars/requisitions lifecycle).
+- src/database.py: Initializes the SQLite database, sets WAL/foreign keys, creates users/vendors/cars/requisitions tables, and provides CRUD helpers (users/vendors/cars/requisitions lifecycle) and analytics queries (fuel usage, price trends).
 - src/modules/__init__.py: Package marker for UI modules.
+- src/modules/dashboard.py: Dashboard UI with fuel usage analytics (pie charts by vehicle/company, top 10 consuming vehicles per company, FULLTANK requests list, fuel price trend graph with vendor filter).
 - src/modules/master_data.py: Vendors and cars management UI (create/reactivate, soft delete).
 - src/modules/requests.py: Fuel request submission UI with history for the user.
-- src/modules/approvals.py: Supervisor approvals UI with approve/reject actions.
+- src/modules/approvals.py: Approver approvals UI with approve/reject actions.
 - src/modules/purchasing.py: PO generation and receiving UI for approved requests.
 - src/modules/billing.py: Billing UI with checkbox-based batch selection to mark received items as billed with invoice #.
 - src/modules/reports.py: Simple status-based reporting view.

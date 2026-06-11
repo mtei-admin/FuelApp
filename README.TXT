@@ -28,7 +28,7 @@ Project structure:
     - __init__.py
     - master_data.py    # Vendors/cars management (create/reactivate, soft delete)
     - requests.py       # Fuel requests submission + history
-    - approvals.py      # Supervisor approvals (approve/reject)
+    - approvals.py      # Approver approvals (approve/reject)
     - purchasing.py     # PO generation and receiving
     - billing.py        # Billing with invoice capture
     - reports.py        # Status-based summary view

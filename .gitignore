@@ -1,0 +1,12 @@
+# Local env file (SMTP and other secrets — do not commit)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+
+# Database (optional: uncomment if you don't want to track DB)
+# data/*.db

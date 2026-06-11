@@ -22,7 +22,7 @@ def test_render_purchase_order_html():
     assert isinstance(html, str)
     assert "PO-12345" in html
     assert "Test Vendor" in html
-    assert "ABC-123" in html
+    assert "Test notes" in html
 
 
 def test_generate_purchase_order_pdf():

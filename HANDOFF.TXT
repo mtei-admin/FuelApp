@@ -1,23 +1,98 @@
 Current State:
-- Phase 1: requirements listed (streamlit, pandas, sqlite3, xhtml2pdf, jinja2, bcrypt); `app.py` initializes `data/fuel_system.db`; `src/database.py` enables WAL/foreign keys and creates users, vendors, cars, requisitions tables with `is_active`.
-- Phase 2: `src/auth.py` hashes/verifies via bcrypt; `init_admin.py` seeds or updates Finance admin with hashed password.
-- Phase 3 shell: `app.py` runs Streamlit login/session shell with role-based navigation; uses DB helper to fetch user and verify via bcrypt; logout supported; role filtering added for pages.
-- Master data: `src/modules/master_data.py` implements vendors/cars create/reactivate and soft delete; DB helpers added for list/upsert/deactivate vendors/cars.
-- Requests/Approvals: `src/database.py` includes requisition CRUD helpers; `src/modules/requests.py` submits requests and shows user history; `src/modules/approvals.py` lists pending and supports approve/reject (role-gated).
-- Purchasing/Billing/Reports: `src/database.py` now supports PO/receiving/billing fields and pricing (unit_price, total_price); purchasing module handles PO generation/receiving with pricing display; billing uses checkbox-based batch selection to mark received items as billed with invoice # (per Phase 6 spec); reports show status-based summaries with cost totals.
-- Pricing & Auto-Calc: `src/database.py` includes unit_price and total_price columns (migrated via _ensure_requisition_columns); `src/modules/requests.py` implements auto-calc total feature (Phase 4) with unit price input; all UI modules display pricing; PO PDFs include pricing columns; reports show cost summaries and grand total.
-- User Management: `src/modules/user_management.py` provides Finance role with full user CRUD (create/edit/deactivate/reactivate); `src/database.py` includes user management helpers (list_users, create_user, update_user, soft_delete_user, reactivate_user).
-- PDF: `src/utils/pdf_gen.py` renders PO HTML/PDF via jinja2 + xhtml2pdf; purchasing flow now offers PO PDF download when generating or viewing PO-generated items.
-- Structure: package markers; UI modules present; `data/` directory; `run_app.bat` launches Streamlit on 0.0.0.0:8501.
-- Documentation updated: CHANGELOG, REQUIREMENTS, SCRIPTS_OVERVIEW, README reflect current setup; sqlite3 removed from requirements (stdlib).
+- ALL PHASES COMPLETE: All 6 development phases from roadmap.txt are fully implemented and functional. The system is production-ready with a complete end-to-end workflow.
+
+- Core Infrastructure (Phases 1-3):
+  * Database: SQLite with WAL mode, foreign keys, soft deletes. Tables: users, vendors, cars, requisitions with full schema including pricing, status tracking, serial numbers, timestamps.
+  * Authentication: bcrypt password hashing, secure login/logout, session management, role-based access control.
+  * Application Shell: Streamlit app with role-based navigation, sidebar menu, notification badges for pending approvals, custom styling system.
+
+- Master Data Module:
+  * Vendors: Full CRUD with soft delete/reactivate, address field, company association.
+  * Vehicles: Full CRUD with soft delete/reactivate, fuel_type (Diesel/Unleaded/Premium), company field (MTEI/DSRDC/DIC/GCEIC/MTEI Trucking), default vendor, driver_name, plate number validation.
+
+- Requests Module:
+  * Request submission with auto-calc pricing, FULLTANK option, fuel type from vehicle, auto-select vendor from vehicle.
+  * Request history with lazy loading, edit functionality (one-time edit, creator or higher role only, pending status only).
+  * Dynamic company logo display based on selected vehicle.
+  * Confirmation dialogs for submissions.
+
+- Approvals Module:
+  * Approver/Accounting role can view pending requests, approve/reject with confirmation dialogs.
+  * Edit functionality for pending requests, FULLTANK to numeric conversion support.
+  * Icon-based UI (✏️ Edit, ✓ Approve, ✗ Reject), compact button layout.
+
+- Purchasing Module:
+  * PO generation workflow with unit price encoding (defaults to current vendor fuel price by fuel type), PDF download capability.
+  * Once per session, purchaser is prompted \"Do you have fuel price updates?\" If Yes, dialog opens with one tab per vendor; each tab has Diesel/Unleaded/Premium (₱/liter) and Update button. Table vendor_fuel_prices stores per-vendor prices.
+  * Receiving workflow to mark POs as received/delivered.
+  * Download icon (📥) for PO PDFs, pricing display throughout.
+
+- Billing Module:
+  * Checkbox-based batch selection for received items.
+  * Invoice number capture and reconciliation.
+  * Status update to 'Billed' with invoice tracking.
+
+- Reports Module:
+  * Status-based summaries (Pending, Approved, PO Generated, Received, Billed).
+  * Cost totals and grand totals per status group.
+  * Billed items sorted by invoice number.
+
+- Dashboard Module (Finance Role Only):
+  * Month/year selector for analytics.
+  * Pie chart visualization: fuel usage by vehicle or by company (toggle).
+  * Top 10 consuming vehicles per company with total liters and request count.
+  * FULLTANK requests list grouped by company.
+  * Fuel price trend graph: monthly average prices for last 12 months, separate lines per fuel type (Diesel/Unleaded/Premium), optional vendor filter, price statistics (latest/min/max).
+
+- User Management Module (Finance Role Only):
+  * Full CRUD: create, edit, deactivate, reactivate users.
+  * Required full_name field for PO printouts (displays in Prepared By/Approved By).
+  * Role assignment (User, Approver, Purchaser, Accounting).
+
+- PDF Generation:
+  * PO printout with company branding (MTE and Planters logos), centered company info, serial numbers, pricing, fuel type, prepared_by/approved_by full names, fallback logo handling.
+  * HTML-to-PDF via jinja2 + xhtml2pdf.
+
+- Additional Features:
+  * Serial number system (starting at 00001) for all requisitions.
+  * Fuel type tracking and validation.
+  * Company field for vehicles with logo associations.
+  * Edit tracking (is_edited, edited_by fields).
+  * Confirmation dialogs for critical actions.
+  * Custom styling system (toggleable via ENABLE_CUSTOM_STYLING flag).
+  * Background logo support (toggleable).
+  * Sidebar notification badges for pending approvals.
+
+- Database Schema:
+  * users: id, username, hashed_password, role, is_active, full_name, created_at
+  * vendors: id, name, address, is_active, created_at
+  * cars: id, plate_number, model, vendor_id, fuel_type, company, driver_name, is_active, created_at
+  * requisitions: id, requester_id, vehicle_id, vendor_id, quantity, unit, fuel_type, status, unit_price, total_price, notes, serial_number, prepared_by, approved_by, invoice_number, is_edited, edited_by, is_active, created_at, updated_at
+
+- Documentation:
+  * CHANGELOG.TXT: 53 entries, reverse chronological, up to date.
+  * REQUIREMENTS.TXT: All dependencies listed (streamlit, pandas, xhtml2pdf, jinja2, bcrypt, pytest, plotly).
+  * SCRIPTS_OVERVIEW.TXT: All modules documented with descriptions.
+  * README.TXT: Installation and setup instructions.
+  * STYLING_GUIDE.TXT: Custom styling instructions.
+
+- Testing:
+  * Test files present: test_auth.py, test_database.py, test_pdf_gen.py.
+  * test_runner.py available for running test suite.
 
 Pending Tasks:
-- Style PO PDF template further; optionally persist PDFs to disk or DB if needed.
-- Add data validation and tests around auth, DB operations, and status transitions.
-- Expand reporting with exports/filters (date ranges, CSV export) and add role-based guarding within modules.
+- Optional enhancements: Further PO PDF template styling refinements, persist PDFs to disk/DB if archival needed.
+- Testing: Expand unit tests for DB helpers, auth flows, status transitions, role checks.
+- Reporting enhancements: Add date range filters, CSV export functionality, more detailed analytics.
+- Data validation: Add comprehensive input validation and error handling improvements.
 
 Next Steps:
-- Add more detailed billing data (e.g., invoice amounts/dates) if needed.
-- Harden role checks and add unit tests for DB helpers and auth flows.
-- Enhance reporting with date range filters, CSV export, and more detailed summaries.
+- If needed: Add invoice amounts/dates to billing module for more detailed financial tracking.
+- Testing: Harden role checks, add comprehensive unit tests for all DB operations and business logic.
+- Reporting: Implement date range filters, CSV export, enhanced dashboard analytics.
+- Performance: Consider caching optimizations for large datasets if performance issues arise.
+
+Session note (2026-04-30):
+- Ran cleanup_all_transactions.py successfully; all transactional data cleared (requests, POs, fuel prices, reset tokens, sessions). Master data (users, vendors, vehicles) retained. Next requisition serial starts at 00001.
+- Preparing git push to GitHub; no remote was configured at session start.
 

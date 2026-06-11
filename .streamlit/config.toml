@@ -1,0 +1,19 @@
+# Streamlit Theme Configuration
+# TEMPORARY STYLING - Delete this file to revert to default theme
+# This file customizes the base colors and fonts for the app
+
+[theme]
+# Primary color (buttons, links, accents)
+primaryColor = "#0D47A1"  # Darker professional blue
+backgroundColor = "#F5F5F5"  # Darker gray background
+secondaryBackgroundColor = "#E0E0E0"  # Darker gray for sidebar/cards
+textColor = "#1A1A1A"  # Darker text
+font = "sans serif"
+
+# Alternative theme option (uncomment to use):
+# primaryColor = "#0066CC"  # Deeper blue
+# backgroundColor = "#FAFAFA"  # Off-white
+# secondaryBackgroundColor = "#F0F0F0"
+# textColor = "#1A1A1A"
+# font = "sans serif"
+

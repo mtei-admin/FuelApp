@@ -1,0 +1,62 @@
+PWA (Progressive Web App) setup for Fuel Requisition System
+==========================================================
+
+The app injects a web app manifest and registers a service worker so users can
+"Add to Home Screen" / install the app (standalone window, icon).
+
+REQUIREMENTS
+-----------
+- HTTPS in production (required for service worker and install prompt).
+- Same origin: manifest and service worker must be served from the same host as the app.
+
+FILES ADDED
+-----------
+- pwa/manifest.webmanifest   App name, theme, icons, display mode.
+- pwa/sw.js                 Minimal service worker (enables install; offline shows a message).
+- pwa/icons/README.txt      Instructions to add icon-192x192.png and icon-512x512.png.
+
+SERVING MANIFEST AND SERVICE WORKER
+-----------------------------------
+Streamlit does not serve these files. Use a reverse proxy (e.g. nginx, Caddy, IIS)
+to serve them at the same origin as the app.
+
+Example (nginx), app at root, Streamlit on port 8501:
+
+  location = /manifest.webmanifest {
+    alias /path/to/FuelApp/pwa/manifest.webmanifest;
+    add_header Content-Type application/manifest+json;
+  }
+  location = /sw.js {
+    alias /path/to/FuelApp/pwa/sw.js;
+    add_header Content-Type application/javascript;
+  }
+  location /icons/ {
+    alias /path/to/FuelApp/pwa/icons/;
+  }
+  location / {
+    proxy_pass http://127.0.0.1:8501;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+  }
+
+Replace /path/to/FuelApp with your project path.
+
+ICONS
+-----
+Add these files under pwa/icons/ (see pwa/icons/README.txt):
+  - icon-192x192.png
+  - icon-512x512.png
+
+You can resize assets/mte_logo.png to 192x192 and 512x512. The manifest references
+/icons/icon-192x192.png and /icons/icon-512x512.png (same origin).
+
+TESTING
+------
+1. Serve the app over HTTPS (or localhost).
+2. Ensure /manifest.webmanifest and /sw.js return the files (check in browser).
+3. Open the app, log in; the page should register the service worker.
+4. In Chrome: menu > "Install Fuel Requisition System" or "Add to Home Screen".
+5. Launch from the home screen to open in standalone window.

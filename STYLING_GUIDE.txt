@@ -1,0 +1,103 @@
+================================================================================
+TEMPORARY STYLING SYSTEM - QUICK REFERENCE
+================================================================================
+
+This styling system can be easily disabled or removed if you don't like it.
+
+================================================================================
+HOW TO DISABLE STYLING (3 METHODS)
+================================================================================
+
+METHOD 1: Quick Toggle (Easiest)
+---------------------------------
+1. Open app.py
+2. Find line: ENABLE_CUSTOM_STYLING = True
+3. Change to: ENABLE_CUSTOM_STYLING = False
+4. Save and restart the app
+
+METHOD 2: Remove Theme File
+----------------------------
+1. Delete the file: .streamlit/config.toml
+2. This will revert to Streamlit's default theme colors
+3. Custom CSS will still apply (use Method 1 to disable that too)
+
+METHOD 3: Complete Removal
+---------------------------
+1. Set ENABLE_CUSTOM_STYLING = False in app.py (Method 1)
+2. Delete .streamlit/config.toml
+3. Optionally delete src/utils/styling.py (if you want to remove it completely)
+
+================================================================================
+WHAT WAS ADDED
+================================================================================
+
+1. .streamlit/config.toml
+   - Base theme colors (blue primary, white background)
+   - Professional color scheme
+
+2. src/utils/styling.py
+   - Custom CSS for forms, buttons, tables, badges
+   - Status badge helper functions
+   - Enhanced visual styling
+
+3. app.py
+   - Added ENABLE_CUSTOM_STYLING flag
+   - Conditional styling loading
+
+================================================================================
+USING STATUS BADGES (OPTIONAL)
+================================================================================
+
+If you want to use the styled status badges in your modules:
+
+    from src.utils.styling import render_status_badge
+    
+    # In your code:
+    render_status_badge("Pending")    # Orange badge
+    render_status_badge("Approved")   # Green badge
+    render_status_badge("Received")   # Blue badge
+    render_status_badge("Billed")     # Purple badge
+    render_status_badge("Rejected")   # Red badge
+
+Or use the HTML version:
+    from src.utils.styling import get_status_badge_html
+    st.markdown(get_status_badge_html("Pending"), unsafe_allow_html=True)
+
+================================================================================
+CUSTOMIZING COLORS
+================================================================================
+
+To change the color scheme:
+
+1. Edit .streamlit/config.toml
+   - Change primaryColor, backgroundColor, etc.
+
+2. Edit src/utils/styling.py
+   - Modify the CSS color values in the custom_css string
+   - Look for hex color codes like #1E88E5 (blue)
+
+================================================================================
+FULL-PAGE BACKGROUND LOGO (TEMPORARY)
+================================================================================
+
+A full-page background logo with 20% transparency has been added behind all modules.
+
+To disable the background logo:
+1. Open src/utils/styling.py
+2. Find the line: ENABLE_BACKGROUND_LOGO = True
+3. Change to: ENABLE_BACKGROUND_LOGO = False
+4. Save and restart the app
+
+The logo uses mte_logo.png from the assets folder. It appears centered on the page
+with 20% opacity, behind all content but not interfering with interactions.
+
+================================================================================
+NOTES
+================================================================================
+
+- The styling is non-intrusive and won't break existing functionality
+- All changes are reversible
+- The app will work normally even if styling is disabled
+- Status badges are optional - existing status displays will continue to work
+- Background logo can be easily disabled with the ENABLE_BACKGROUND_LOGO flag
+

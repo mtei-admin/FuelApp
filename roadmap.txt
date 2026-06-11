@@ -8,7 +8,7 @@ AI ASSISTANT: Cursor AI
 ================================================================================
 We are building a multi-user, role-based Fuel Requisition application. 
 It replaces a manual process with a digital workflow: 
-Request -> Supervisor Approval -> PO Generation -> Receiving -> Invoice Reconciliation.
+Request -> Approver Approval -> PO Generation -> Receiving -> Invoice Reconciliation.
 
 TECH STACK:
 - Language: Python 3.9+
@@ -65,7 +65,7 @@ DATABASE RULES (FileMaker-like Logic):
 
 USER ROLES & PERMISSIONS:
 - User: Create Request, View Own History.
-- Supervisor: View Pending Requests, Approve/Reject.
+- Approver: View Pending Requests, Approve/Reject.
 - Purchaser: View Approved Requests, Generate PO (PDF), Mark PO as "Received/Delivered".
 - Finance: View Received items, Reconcile with Vendor Invoice (Billing), 
   Manage Master Data, Manage Users.
@@ -95,13 +95,13 @@ Goal: Navigation and Access Control.
   1. Import src.auth.
   2. Check st.session_state.
   3. If not logged in -> Show Login Form.
-  4. If logged in -> Show Sidebar Menu based on Role (e.g., if role == 'Supervisor': show_approvals).
+  4. If logged in -> Show Sidebar Menu based on Role (e.g., if role == 'Approver': show_approvals).
 
 PHASE 4: CORE MODULES (CRUD)
 Goal: Build the UI screens in 'src/modules/'.
 - src/modules/master_data.py: Add/Edit Vendors & Cars (Handle soft deletes).
 - src/modules/requests.py: Form to submit fuel request (Auto-calc Total).
-- src/modules/approvals.py: Supervisor view (Data Editor for quick approvals).
+- src/modules/approvals.py: Approver view (Data Editor for quick approvals).
 
 PHASE 5: PURCHASING & PDF
 Goal: Generate POs.

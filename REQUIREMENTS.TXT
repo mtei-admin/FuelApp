@@ -4,4 +4,6 @@ xhtml2pdf
 jinja2
 bcrypt
 pytest
+plotly
+python-dotenv
 

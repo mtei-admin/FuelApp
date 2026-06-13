@@ -1,0 +1,105 @@
+================================================================================
+FUEL REQUISITION SYSTEM — WINDOWS SERVER PRODUCTION DEPLOYMENT
+================================================================================
+
+Overview
+--------
+Production uses React (frontend/dist) + FastAPI (127.0.0.1:8000).
+Users reach the app via IIS with HTTPS on your company domain.
+SQLite database lives in data/fuel_system.db.
+
+Quick start (automated)
+-----------------------
+1. Open PowerShell in the project folder.
+2. Run:  powershell -ExecutionPolicy Bypass -File deploy\install_windows.ps1
+3. Edit .env — set APP_BASE_URL and SMTP (see SMTP_SETUP.txt).
+4. Seed admin:  .\.venv\Scripts\python.exe init_admin.py
+5. Build UI:    deploy\build_frontend.bat  (requires Node.js LTS)
+6. Test API:    deploy\run_production.bat  -> http://127.0.0.1:8000/api/health
+7. Configure IIS (see deploy\IIS_SETUP.txt) and open https://YOUR-HOSTNAME
+
+Deployment modes
+----------------
+
+MODE A — IIS + HTTPS (recommended for production)
+  Users -> https://fuel.yourcompany.com (IIS, port 443, SSL)
+                |
+                +-- static files from frontend/dist
+                +-- /api/*  ->  http://127.0.0.1:8000  (FastAPI)
+
+  Full step-by-step: deploy\IIS_SETUP.txt
+
+  Quick commands (Administrator PowerShell):
+  a) Complete Quick start above.
+  b) powershell -ExecutionPolicy Bypass -File deploy\setup_iis.ps1 -HostName "fuel.yourcompany.com" -CreateSelfSignedCert
+  c) Install URL Rewrite + ARR; enable proxy in IIS (see IIS_SETUP.txt).
+  d) web.config is in the project root (IIS site physical path = project folder).
+  e) deploy\run_production.bat  OR  deploy\install_service.ps1
+  f) Set APP_BASE_URL=https://fuel.yourcompany.com in .env
+  g) Schedule deploy\backup_database.ps1 in Task Scheduler
+
+MODE B — LAN / VPN only (simpler, no HTTPS, no IIS)
+  Users -> http://SERVER-IP:8000  (FastAPI serves React + API on one port)
+
+  Steps:
+  a) Complete Quick start above (including build_frontend.bat).
+  b) Run as Administrator: deploy\open_firewall.ps1
+  c) Run: deploy\run_lan.bat
+  d) Set APP_BASE_URL=http://SERVER-IP:8000 in .env (for password-reset emails).
+  e) PWA install will not work without HTTPS.
+
+Development (local)
+-------------------
+  deploy\run_api.bat       -> http://127.0.0.1:8000
+  deploy\run_frontend.bat  -> http://localhost:5173  (Vite dev proxy to API)
+
+Legacy Streamlit UI (deprecated)
+--------------------------------
+  deploy\run_streamlit.bat -> http://127.0.0.1:8501
+  Kept for reference only; all features are in the React app.
+
+Files reference
+---------------
+  deploy/install_windows.ps1   Create venv, pip install, init DB, create .env
+  deploy/build_frontend.bat    npm install + npm run build -> frontend/dist
+  deploy/run_production.bat    FastAPI on 127.0.0.1:8000 (behind IIS)
+  deploy/run_lan.bat           FastAPI + React SPA on 0.0.0.0:8000
+  deploy/run_streamlit.bat     Legacy Streamlit UI (deprecated)
+  deploy/install_service.ps1   NSSM Windows service (auto-start on boot)
+  deploy/open_firewall.ps1     Allow inbound TCP 8000 (LAN mode)
+  deploy/backup_database.ps1   Copy DB to data/backups/ (keeps last 30)
+  deploy/iis_web.config        IIS template (web.config in project root is canonical)
+  web.config                   IIS: serve frontend/dist, proxy /api/* to :8000
+
+Post-deploy checklist
+---------------------
+  [ ] frontend/dist built (deploy\build_frontend.bat)
+  [ ] .env configured (APP_BASE_URL matches public URL)
+  [ ] init_admin.py run; Superuser created in User Management if needed
+  [ ] User emails set (required for Forgot Password)
+  [ ] Test each role: User, Approver, Purchaser, Accounting, Superuser
+  [ ] Test PO PDF download (assets/ logos present)
+  [ ] Daily backup scheduled (deploy\backup_database.ps1)
+  [ ] Firewall: only allow trusted networks
+
+Updating the app
+----------------
+  git pull
+  .\.venv\Scripts\python.exe -m pip install -r REQUIREMENTS.TXT
+  .\.venv\Scripts\python.exe -m pip install -r api\requirements.txt
+  deploy\build_frontend.bat
+  Restart service: nssm restart FuelApp
+  (or stop/start deploy\run_production.bat)
+
+Troubleshooting
+---------------
+  Blank page on IIS     Run deploy\build_frontend.bat; check frontend\dist\index.html exists
+  App won't start       Check logs\service_stderr.log (if using NSSM service)
+  IIS 502 on /api/*     Ensure FastAPI is running on 127.0.0.1:8000
+  Reset emails wrong    APP_BASE_URL in .env must match browser URL exactly
+  SQLite locked         Reduce concurrent writes; consider PostgreSQL later
+  Python errors         Use Python 3.11 or 3.12 (3.14 may have package issues)
+
+See also: README.TXT, MIGRATION.TXT, SMTP_SETUP.txt, PWA_SETUP.txt
+
+================================================================================

@@ -94,5 +94,17 @@ Next Steps:
 
 Session note (2026-04-30):
 - Ran cleanup_all_transactions.py successfully; all transactional data cleared (requests, POs, fuel prices, reset tokens, sessions). Master data (users, vendors, vehicles) retained. Next requisition serial starts at 00001.
-- Preparing git push to GitHub; no remote was configured at session start.
+- Pushed to GitHub: https://github.com/mtei-admin/FuelApp.git (master).
+- Added Windows Server production deployment package: DEPLOYMENT.TXT and deploy/ scripts (install, IIS, service, firewall, backup). User chose Option B (on-prem) over Streamlit Community Cloud.
+
+Pending deployment steps (on server):
+- Run deploy/install_windows.ps1, edit .env, run init_admin.py, test deploy/run_production.bat.
+- Configure IIS + HTTPS using deploy/iis_web.config (or use deploy/run_lan.bat for quick LAN).
+- Install NSSM service via deploy/install_service.ps1; schedule deploy/backup_database.ps1.
+
+React migration (Phase 4 complete — production):
+- React + FastAPI is the production stack. IIS serves frontend/dist; /api/* proxies to uvicorn :8000.
+- Build: deploy\build_frontend.bat. API: deploy\run_production.bat or install_service.ps1.
+- LAN without IIS: deploy\run_lan.bat (port 8000). Legacy Streamlit: deploy\run_streamlit.bat (:8501).
+- Dev: deploy\run_api.bat + deploy\run_frontend.bat. See MIGRATION.TXT and DEPLOYMENT.TXT.
 

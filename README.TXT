@@ -1,42 +1,43 @@
-Fuel Requisition System (Prototype)
+Fuel Requisition System
 
 Prerequisites:
-- Python 3.11+ installed.
-- PowerShell or bash terminal.
+- Python 3.11 or 3.12 (recommended). Python 3.14 may work but is not tested.
+- Node.js LTS (for production frontend build).
+- Windows Server or Windows 10/11 for production deployment.
+- PowerShell.
 
-Installation:
-1) Create/activate a virtual environment (python -m venv .venv && .venv\Scripts\activate on Windows).
-2) Install dependencies: pip install -r REQUIREMENTS.TXT
+Installation (development):
+1) Clone: git clone https://github.com/mtei-admin/FuelApp.git
+2) Create venv: py -m venv .venv && .venv\Scripts\activate
+3) Install: pip install -r REQUIREMENTS.TXT && pip install -r api\requirements.txt
+4) Copy env.example to .env and set APP_BASE_URL / SMTP if using Forgot Password.
+5) Seed admin: python init_admin.py
+6) Dev servers:
+     deploy\run_api.bat       (http://127.0.0.1:8000)
+     deploy\run_frontend.bat  (http://localhost:5173)
 
-Running the app:
-- Development entry point: python app.py (initializes data/fuel_system.db)
-- Streamlit launcher: run_app.bat will be provided once UI is built.
- - Seed admin user: python init_admin.py (creates/updates Finance admin)
- - Streamlit (recommended): run_app.bat (serves on 0.0.0.0:8501)
+Production deployment (Windows Server):
+- Full guide: DEPLOYMENT.TXT
+- Automated install: powershell -ExecutionPolicy Bypass -File deploy\install_windows.ps1
+- Build UI: deploy\build_frontend.bat
+- Production API (localhost, for IIS): deploy\run_production.bat
+- LAN access (no HTTPS): deploy\run_lan.bat
+- Windows service (auto-start): deploy\install_service.ps1 (requires NSSM)
+- IIS reverse proxy: web.config in project root (see deploy\IIS_SETUP.txt)
 
 Default credentials:
-- None yet; admin seeding will be added with auth implementation.
+- Created by init_admin.py (default username: accounting). No default password.
 
 Project structure:
-- app.py                # Entry point, ensures DB is initialized
-- data/                 # SQLite database files (created at runtime)
-- src/
-  - __init__.py         # Package marker
-  - auth.py             # Authentication helpers (bcrypt hash/verify)
-  - database.py         # Database initialization, base tables, and CRUD helpers
-  - modules/            # Streamlit screens
-    - __init__.py
-    - master_data.py    # Vendors/cars management (create/reactivate, soft delete)
-    - requests.py       # Fuel requests submission + history
-    - approvals.py      # Approver approvals (approve/reject)
-    - purchasing.py     # PO generation and receiving
-    - billing.py        # Billing with invoice capture
-    - reports.py        # Status-based summary view
-  - utils/              # Helper utilities
-    - __init__.py
-    - pdf_gen.py        # Purchase order PDF rendering (jinja2 + xhtml2pdf)
+- api/                  FastAPI backend (production)
+- frontend/             React + TypeScript SPA
+- app.py                Legacy Streamlit UI (deprecated; use deploy\run_streamlit.bat)
+- data/                 SQLite database (fuel_system.db)
+- deploy/               Windows production scripts and IIS config
+- src/database.py       Database schema and CRUD (shared by API and legacy Streamlit)
+- src/modules/          Legacy Streamlit screens
+- src/utils/            PDF generation, email, styling
+- pwa/                  PWA manifest and service worker (optional, serve via IIS)
+- assets/               Company logos for UI and PO PDFs
 
-Notes:
-- All database writes must use parameterized queries and soft deletes for master data.
-- Use `@st.cache_data` only for heavy read queries, not transactional updates.
-
+See also: MIGRATION.TXT, DEPLOYMENT.TXT, SMTP_SETUP.txt, SCRIPTS_OVERVIEW.TXT

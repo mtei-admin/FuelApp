@@ -1,0 +1,53 @@
+================================================================================
+VERCEL DEPLOYMENT — Fuel Requisition System (React frontend)
+================================================================================
+
+Vercel hosts the React UI only. The FastAPI backend + SQLite database must run
+on your Windows server (deploy\run_production.bat or IIS). Vercel cannot run
+the Python API or local database.
+
+Architecture
+------------
+  Browser -> https://your-app.vercel.app  (React static site)
+                |
+                +-- /api/*  ->  your public API URL  (rewrite proxy)
+
+  Recommended: set API_PROXY_URL in Vercel so /api calls are same-origin
+  (session cookies work). Your API must be reachable over HTTPS from the internet.
+
+GitHub + Vercel (recommended)
+-----------------------------
+1. Push this repo to GitHub (already configured: mtei-admin/FuelApp).
+2. Go to https://vercel.com/new
+3. Import the GitHub repository.
+4. Set Root Directory to: frontend
+5. Framework Preset: Vite (auto-detected)
+6. Environment variables (Production):
+     API_PROXY_URL = https://your-public-api-host
+     Example: https://fuel.mteinc.local  (must resolve publicly, not 10.x LAN only)
+7. Deploy.
+
+If your API is only on a private LAN IP (e.g. 10.10.20.40), Vercel cannot
+proxy to it. Options:
+  - Use IIS + HTTPS on your server (see DEPLOYMENT.TXT) — no Vercel needed
+  - Expose API via Cloudflare Tunnel / ngrok with HTTPS
+  - Set VITE_API_BASE_URL to public API URL (requires CORS + cookie config on API)
+
+CLI deploy
+----------
+  cd frontend
+  npm install
+  set API_PROXY_URL=https://your-public-api-host
+  npx vercel --prod
+
+Local .env for Vercel CLI (optional, frontend/.env.production.local):
+  API_PROXY_URL=https://your-public-api-host
+
+Server-side (API host) — add Vercel origin to CORS if using VITE_API_BASE_URL:
+  CORS_ORIGINS=https://your-app.vercel.app
+
+Update APP_BASE_URL on the server .env to match your public URL for emails.
+
+See also: DEPLOYMENT.TXT, MIGRATION.TXT
+
+================================================================================

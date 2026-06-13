@@ -1,0 +1,156 @@
+================================================================================
+IIS + HTTPS SETUP — Fuel Requisition System
+================================================================================
+
+Architecture
+------------
+  Browser  ->  https://YOUR-HOSTNAME  (IIS, port 443, SSL certificate)
+                  |
+                  +-- static files  ->  frontend/dist  (React SPA)
+                  +-- /api/*        ->  http://127.0.0.1:8000  (FastAPI)
+                  +-- /manifest.webmanifest, /sw.js  (optional, from pwa/)
+
+Prerequisites
+-------------
+  [ ] Windows Server with Administrator access
+  [ ] Hostname or DNS record pointing to this server (e.g. fuel.mteinc.local)
+  [ ] SSL certificate (internal CA, or self-signed for testing)
+  [ ] Node.js LTS (for deploy\build_frontend.bat)
+  [ ] Fuel App installed: deploy\install_windows.ps1 completed
+  [ ] Frontend built: deploy\build_frontend.bat
+  [ ] API running: deploy\run_production.bat OR FuelApp Windows service
+
+================================================================================
+STEP 1 — Install IIS (PowerShell as Administrator)
+================================================================================
+
+  Install-WindowsFeature Web-Server -IncludeManagementTools
+
+  Or run:  powershell -ExecutionPolicy Bypass -File deploy\setup_iis.ps1
+
+================================================================================
+STEP 2 — Install URL Rewrite and ARR
+================================================================================
+
+  Download and install (restart IIS Manager after each):
+
+  1. URL Rewrite Module 2.x
+     https://www.iis.net/downloads/microsoft/url-rewrite
+
+  2. Application Request Routing (ARR) 3.x
+     https://www.iis.net/downloads/microsoft/application-request-routing
+
+  3. Enable reverse proxy in IIS Manager:
+     - Click the SERVER name (top left, not a site)
+     - Open "Application Request Routing Cache"
+     - Click "Server Proxy Settings..." (right panel)
+     - Check "Enable proxy"
+     - Click Apply
+
+  4. Allow reverse-proxy server variables (one-time, as Administrator):
+
+     In IIS Manager -> SERVER -> URL Rewrite -> View Server Variables -> Add:
+       HTTP_X_FORWARDED_PROTO
+       HTTP_X_FORWARDED_HOST
+       HTTP_X_FORWARDED_FOR
+
+     Or run deploy\setup_iis.ps1 which attempts this automatically.
+
+================================================================================
+STEP 3 — Create IIS site (automated or manual)
+================================================================================
+
+  Automated (Administrator PowerShell, from project root):
+
+    powershell -ExecutionPolicy Bypass -File deploy\setup_iis.ps1 `
+      -HostName "fuel.mteinc.local" `
+      -CreateSelfSignedCert
+
+  Manual:
+  a) IIS Manager -> Sites -> Add Website
+  b) Site name:     FuelApp
+  c) Physical path: C:\CursorAi Creation\New\FuelApp  (your project folder)
+  d) Binding:       https, port 443, hostname = your FQDN, select SSL certificate
+  e) web.config is already in the project root (do not copy from deploy\)
+
+  Application pool settings:
+  - .NET CLR version: No Managed Code
+  - Start Mode: AlwaysRunning (optional)
+
+================================================================================
+STEP 4 — Build frontend and start API
+================================================================================
+
+  Build React (once per deploy / after git pull):
+    deploy\build_frontend.bat
+
+  Start API — Option A (manual test):
+    deploy\run_production.bat
+
+  Option B — Windows Service (recommended, requires NSSM in C:\nssm\):
+    powershell -ExecutionPolicy Bypass -File deploy\install_service.ps1
+
+  Verify API: open http://127.0.0.1:8000/api/health on the server (returns JSON).
+
+================================================================================
+STEP 5 — Configure .env for HTTPS URL
+================================================================================
+
+  Edit .env in project root:
+
+    APP_BASE_URL=https://fuel.mteinc.local
+
+  (No port number. Must match the IIS hostname exactly.)
+  Session cookies use Secure=true automatically when APP_BASE_URL is https://.
+
+  Configure SMTP settings for Forgot Password (see SMTP_SETUP.txt).
+
+================================================================================
+STEP 6 — PWA icons (optional)
+================================================================================
+
+  Add to pwa\icons\:
+    icon-192x192.png
+    icon-512x512.png
+
+  Resize assets\mte_logo.png to 192x192 and 512x512.
+
+================================================================================
+STEP 7 — Verify deployment
+================================================================================
+
+  From a client PC on the network:
+
+  [ ] https://YOUR-HOSTNAME loads React login page
+  [ ] Log in as accounting / admin user
+  [ ] Submit a test fuel request
+  [ ] Download a PO PDF
+  [ ] https://YOUR-HOSTNAME/api/health returns {"status":"ok"}
+  [ ] Forgot Password email link uses https://YOUR-HOSTNAME?token=...
+
+  Schedule daily backup:
+    Task Scheduler -> deploy\backup_database.ps1
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+  Blank white page
+    Run deploy\build_frontend.bat. Ensure frontend\dist\index.html exists.
+
+  502 Bad Gateway on /api/*
+    FastAPI is not running. Start deploy\run_production.bat or FuelApp service.
+
+  500.52 URL Rewrite Module Error
+    Install URL Rewrite. Ensure web.config is valid.
+
+  CSS/JS 404
+    Rebuild frontend. Check IIS rewrite rules for frontend/dist static files.
+
+  Reset email links go to wrong URL
+    Fix APP_BASE_URL in .env and restart the API service.
+
+  Certificate warning
+    Install a trusted cert from your internal CA, or distribute self-signed cert to clients.
+
+================================================================================

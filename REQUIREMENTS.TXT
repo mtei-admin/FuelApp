@@ -1,3 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+
+# Streamlit app (existing)
 streamlit
 pandas
 xhtml2pdf

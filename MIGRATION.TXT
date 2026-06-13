@@ -1,0 +1,63 @@
+================================================================================
+REACT + FASTAPI MIGRATION
+================================================================================
+
+Phase 0 (complete): Auth — login, logout, /me, session cookie
+Phase 1 (complete): Master Data — vendors and vehicles CRUD + soft delete
+Phase 2 (complete): Requests + Approvals — submit, history, edit, approve/reject
+Phase 3 (complete): Purchasing, Billing, Reports, Dashboard + PDF documents
+Phase 4 (complete): Production — IIS serves React; FastAPI replaces Streamlit
+
+Production architecture
+-----------------------
+  Browser -> IIS (HTTPS)
+              +-- /*           -> frontend/dist  (React SPA)
+              +-- /api/*       -> 127.0.0.1:8000  (FastAPI)
+
+  LAN mode (no IIS): deploy\run_lan.bat serves React + API on port 8000.
+
+  Legacy Streamlit: deploy\run_streamlit.bat on port 8501 (deprecated).
+
+Development (two terminals)
+---------------------------
+  Terminal 1: deploy\run_api.bat     -> http://127.0.0.1:8000
+  Terminal 2: deploy\run_frontend.bat -> http://localhost:5173
+
+Production deploy
+-----------------
+  deploy\install_windows.ps1
+  deploy\build_frontend.bat
+  deploy\run_production.bat  OR  deploy\install_service.ps1
+  IIS: see deploy\IIS_SETUP.txt
+
+Role access (matches legacy Streamlit app.py)
+---------------------------------------------
+  Requests:     all authenticated users
+  Approvals:    approver, purchaser, accounting, superuser (view)
+                approver, accounting, superuser (approve/reject)
+  Master Data:  approver, accounting, superuser
+  Purchasing:   purchaser, accounting, superuser
+  Billing:      purchaser, accounting, superuser
+  Reports:      accounting, superuser
+  Dashboard:    accounting, superuser
+
+API endpoints (summary)
+-----------------------
+  /api/auth/*           login, logout, me
+  /api/vendors/*        master data
+  /api/vehicles/*
+  /api/requisitions/*
+  /api/approvals/*
+  /api/purchasing/*
+  /api/billing/*
+  /api/reports/*
+  /api/dashboard
+  /api/documents/*
+
+React routes
+------------
+  /, /login, /requests, /approvals, /purchasing, /billing, /reports, /dashboard, /master-data
+
+Session cookie: fuel_api_session (httpOnly; Secure when APP_BASE_URL is https://)
+
+================================================================================

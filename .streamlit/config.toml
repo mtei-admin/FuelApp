@@ -1,6 +1,16 @@
-# Streamlit Theme Configuration
-# TEMPORARY STYLING - Delete this file to revert to default theme
-# This file customizes the base colors and fonts for the app
+# Streamlit configuration (theme + production behind IIS reverse proxy)
+
+[server]
+headless = true
+address = "127.0.0.1"
+port = 8501
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false
+
+[browser]
+gatherUsageStats = false
+serverAddress = "127.0.0.1"
 
 [theme]
 # Primary color (buttons, links, accents)

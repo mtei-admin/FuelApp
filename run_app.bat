@@ -1,12 +1,15 @@
 @echo off
-rem Launch Streamlit for the Fuel Requisition System
+rem Development launcher — starts FastAPI + Vite dev servers
 setlocal
+cd /d "%~dp0"
 
-if not exist ".venv" (
-    echo [WARN] No virtual environment detected. Ensure dependencies are installed.
-)
+echo Fuel Requisition System — development mode
+echo.
+echo Starting API (port 8000) and frontend (port 5173) in separate windows...
+echo For production, see DEPLOYMENT.TXT
+echo.
 
-py -m streamlit run app.py --server.address 0.0.0.0 --server.port 443
+start "FuelApp API" cmd /k deploy\run_api.bat
+start "FuelApp Frontend" cmd /k deploy\run_frontend.bat
 
 endlocal
-

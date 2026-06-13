@@ -1,3 +1,11 @@
+2026-06-11 | Deployment | Vercel frontend deploy: vercel.json, build-time API proxy script, VITE_API_BASE_URL support, VERCEL_DEPLOY.TXT.
+2026-06-11 | Migration | Phase 4 production cutover: web.config serves frontend/dist and proxies /api/* to FastAPI :8000; run_production.bat and NSSM service run uvicorn; build_frontend.bat; LAN mode on :8000 with SPA from API; Streamlit moved to deploy/run_streamlit.bat (deprecated). Secure session cookies when APP_BASE_URL is HTTPS.
+2026-06-11 | Migration | Phase 3 Purchasing, Billing, Reports, Dashboard: FastAPI services and routers for purchasing (fuel prices, PO gen, receiving), billing (actual qty, mark billed), reports (summary, CSV/PDF export), dashboard analytics, and document PDF endpoints; React pages wired in App.tsx with role guards, sidebar links, and home cards. Frontend build verified.
+2026-04-30 | Migration | Phase 2 Requests + Approvals: requisitions API (submit, history, edit, prior-approved warning), approvals API (pending, approve/reject, quantity edit); React Requests and Approvals pages with mobile layout and sidebar badge.
+2026-04-30 | Migration | Phase 1 Master Data: FastAPI vendors/vehicles CRUD API with role guards; React Master Data page (tabs, add/edit/deactivate). AppLayout sidebar added.
+2026-04-30 | Migration | Phase 0 React + FastAPI scaffold: api/ (auth login/logout/me, session cookie), frontend/ (Vite React TS login + home), deploy/run_api.bat, deploy/run_frontend.bat, MIGRATION.TXT. Streamlit unchanged.
+2026-04-30 | Deployment | IIS + HTTPS: web.config at project root, deploy/IIS_SETUP.txt, deploy/setup_iis.ps1; Streamlit config.toml updated for reverse-proxy (127.0.0.1:8501, headless).
+2026-04-30 | Deployment | Added Windows Server production deployment: DEPLOYMENT.TXT, deploy/ scripts (install, production/LAN launchers, IIS web.config, NSSM service, firewall, DB backup). Fixed run_app.bat to use port 8501 with venv support.
 2026-03-30 | Purchasing | Added an anytime "Update Fuel Prices" button and set session flag after price updates.
 2026-03-30 | Purchasing | Left-aligned the anytime "Update Fuel Prices" button with the page section.
 2026-03-30 | Purchasing | Fuel price update prompt is now a centered, blocking modal to be more attention-grabbing.

@@ -1,3 +1,53 @@
+- api/routers/purchasing.py: Fuel prices, approved list, PO generation, receiving endpoints.
+- api/routers/billing.py: Received items, actual quantity update, mark billed batch.
+- api/routers/reports.py: Status summary, CSV export, PDF export endpoints.
+- api/routers/dashboard.py: Analytics aggregation (usage, trends) with year/month/vendor filters.
+- api/routers/documents.py: PO PDF download and billed summary PDF generation.
+- api/services/purchasing_service.py: Purchasing workflow wrapping src/database.py and PO logic.
+- api/services/billing_service.py: Billing reconciliation and mark-billed batch logic.
+- api/services/reports_service.py: Grouped report data and CSV builder.
+- api/services/dashboard_service.py: Dashboard analytics aggregation.
+- api/services/pdf_service.py: PDF generation for PO, reports, and billed summaries via src/utils/pdf_gen.py.
+- frontend/src/pages/PurchasingPage.tsx: Fuel price updates, PO generation, receiving UI.
+- frontend/src/pages/BillingPage.tsx: Actual quantity entry, batch mark billed, summary PDF.
+- frontend/src/pages/ReportsPage.tsx: Status summary with CSV/PDF download.
+- frontend/src/pages/DashboardPage.tsx: Usage analytics and fuel price trend charts.
+- frontend/src/api/purchasing.ts: Purchasing API client.
+- frontend/src/api/billing.ts: Billing API client.
+- frontend/src/api/reports.ts: Reports API client.
+- frontend/src/api/dashboard.ts: Dashboard API client.
+- frontend/src/utils/download.ts: Browser blob download helper for PDF/CSV exports.
+- frontend/scripts/write-vercel-config.mjs: Generates vercel.json rewrites from API_PROXY_URL at build time.
+- frontend/vercel.json: Vercel deployment config (SPA + optional API proxy).
+- VERCEL_DEPLOY.TXT: Guide for deploying React frontend to Vercel with GitHub.
+- api/routers/requisitions.py: Fuel request submit, history, edit, form context, prior-approved check.
+- api/routers/approvals.py: Pending queue, approve/reject, quantity edit, pending count badge.
+- api/services/requisition_service.py: Requisition business logic wrapping src/database.py.
+- api/services/approval_service.py: Approval workflow and display total calculation.
+- frontend/src/pages/RequestsPage.tsx: New request form, history, one-time edit.
+- frontend/src/pages/ApprovalsPage.tsx: Pending queue with desktop table and mobile cards.
+- api/routers/vehicles.py: Vehicle list, options, create, update, deactivate endpoints.
+- api/services/vendor_service.py: Vendor master data service wrapping src/database.py.
+- api/services/vehicle_service.py: Vehicle master data service wrapping src/database.py.
+- api/main.py: FastAPI entry point with CORS, health check, and auth router.
+- api/core/config.py: API settings (DB path, session cookie, CORS origins).
+- api/core/dependencies.py: Session cookie auth dependencies and role guards.
+- api/routers/auth.py: Login, logout, and /me endpoints.
+- api/services/auth_service.py: Authentication business logic wrapping src/database.py.
+- deploy/run_api.bat: Start FastAPI dev server on port 8000.
+- deploy/run_frontend.bat: Start Vite React dev server on port 5173.
+- frontend/: React + TypeScript SPA (auth, requests, approvals, purchasing, billing, reports, dashboard, master data).
+- deploy/build_frontend.bat: npm install and build React app to frontend/dist for production.
+- deploy/run_production.bat: FastAPI on 127.0.0.1:8000 for IIS reverse proxy (SERVE_FRONTEND=false).
+- deploy/run_lan.bat: FastAPI + React SPA on 0.0.0.0:8000 for LAN access without IIS.
+- deploy/run_streamlit.bat: Legacy Streamlit UI on 127.0.0.1:8501 (deprecated).
+- deploy/install_service.ps1: NSSM Windows service running uvicorn (auto-start on boot).
+- deploy/open_firewall.ps1: Creates inbound Windows Firewall rule for TCP port 8000 (LAN mode).
+- deploy/backup_database.ps1: Copies fuel_system.db to data/backups/ and retains last 30 backups.
+- deploy/iis_web.config: Legacy IIS template (superseded by web.config in project root).
+- deploy/IIS_SETUP.txt: Step-by-step IIS + HTTPS deployment guide (URL Rewrite, ARR, SSL, PWA).
+- deploy/setup_iis.ps1: Administrator script to install IIS, create site, HTTPS binding, and proxy variables.
+- web.config: IIS reverse-proxy config (project root; site physical path must point here).
 - app.py: Entry point that ensures the SQLite database is initialized at startup.
 - init_admin.py: CLI helper to seed or update the Finance admin user.
 - src/__init__.py: Package marker for core application code.

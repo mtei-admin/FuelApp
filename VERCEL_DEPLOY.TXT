@@ -20,10 +20,11 @@ GitHub + Vercel (recommended)
 1. Push this repo to GitHub (already configured: mtei-admin/FuelApp).
 2. Go to https://vercel.com/new
 3. Import the GitHub repository mtei-admin/FuelApp.
-4. Root Directory:
-     - Leave blank (uses vercel.json at repo root), OR
-     - Set to frontend (uses frontend/vercel.json)
-   Do not leave root empty without vercel.json — that causes 404.
+4. Root Directory (important for GitHub project fuel-app):
+     - Set to frontend  (recommended — uses frontend/vercel.json + frontend/api proxy)
+     - OR leave blank (uses root vercel.json; builds frontend/dist)
+   Do not use vercel.json "functions" runtime block — edge runtime is set in
+   frontend/api/[...path].js only.
 5. Environment variables (Production):
      API_PROXY_URL = https://your-public-api-host
 6. Deploy.

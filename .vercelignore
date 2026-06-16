@@ -1,11 +1,9 @@
-# Python API package — not Vercel serverless functions
+# Python FastAPI package (not Vercel serverless)
 api/
 
-# Backend / dev files not needed for frontend deploy
+# Backend not needed for frontend static deploy
 src/
 deploy/
 data/
 tests/
 backup_before_*/
-*.py
-!frontend/**

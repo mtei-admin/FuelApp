@@ -1,3 +1,5 @@
+2026-06-11 | Deployment | Fix Vercel 404: root vercel.json for GitHub monorepo deploy, SPA rewrite /(.*) -> index.html.
+2026-06-16 | Deployment | Fix Vercel 404: root vercel.json for GitHub monorepo (frontend/dist output); remove broken SPA catch-all rewrite (Vite handles routing).
 2026-06-11 | Deployment | Vercel frontend deploy: vercel.json, build-time API proxy script, VITE_API_BASE_URL support, VERCEL_DEPLOY.TXT.
 2026-06-11 | Migration | Phase 4 production cutover: web.config serves frontend/dist and proxies /api/* to FastAPI :8000; run_production.bat and NSSM service run uvicorn; build_frontend.bat; LAN mode on :8000 with SPA from API; Streamlit moved to deploy/run_streamlit.bat (deprecated). Secure session cookies when APP_BASE_URL is HTTPS.
 2026-06-11 | Migration | Phase 3 Purchasing, Billing, Reports, Dashboard: FastAPI services and routers for purchasing (fuel prices, PO gen, receiving), billing (actual qty, mark billed), reports (summary, CSV/PDF export), dashboard analytics, and document PDF endpoints; React pages wired in App.tsx with role guards, sidebar links, and home cards. Frontend build verified.

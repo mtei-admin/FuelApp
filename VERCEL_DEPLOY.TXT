@@ -19,13 +19,14 @@ GitHub + Vercel (recommended)
 -----------------------------
 1. Push this repo to GitHub (already configured: mtei-admin/FuelApp).
 2. Go to https://vercel.com/new
-3. Import the GitHub repository.
-4. Set Root Directory to: frontend
-5. Framework Preset: Vite (auto-detected)
-6. Environment variables (Production):
+3. Import the GitHub repository mtei-admin/FuelApp.
+4. Root Directory:
+     - Leave blank (uses vercel.json at repo root), OR
+     - Set to frontend (uses frontend/vercel.json)
+   Do not leave root empty without vercel.json — that causes 404.
+5. Environment variables (Production):
      API_PROXY_URL = https://your-public-api-host
-     Example: https://fuel.mteinc.local  (must resolve publicly, not 10.x LAN only)
-7. Deploy.
+6. Deploy.
 
 If your API is only on a private LAN IP (e.g. 10.10.20.40), Vercel cannot
 proxy to it. Options:

@@ -1,46 +1,73 @@
 /**
- * Writes vercel.json rewrites before build so API_PROXY_URL can be set in Vercel env.
- * When API_PROXY_URL is set, /api/* is proxied same-origin (session cookies work).
- * When unset, only SPA fallback is configured; set VITE_API_BASE_URL instead.
+ * Optional: inject API proxy rewrites into vercel.json when API_PROXY_URL is set.
+ * SPA routing is handled automatically by Vercel for Vite projects.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, "..");
+const frontendRoot = path.join(__dirname, "..");
+const repoRoot = path.resolve(frontendRoot, "..");
 const apiProxy = (process.env.API_PROXY_URL ?? "").replace(/\/$/, "");
 
-const rewrites = [];
-
-if (apiProxy) {
-  rewrites.push({
-    source: "/api/:path*",
-    destination: `${apiProxy}/api/:path*`,
-  });
+/** @returns {object[]} */
+function buildRewrites() {
+  if (!apiProxy) {
+    return [];
+  }
+  return [
+    {
+      source: "/api/:path*",
+      destination: `${apiProxy}/api/:path*`,
+    },
+  ];
 }
 
-rewrites.push({
-  source: "/((?!assets/).*)",
-  destination: "/index.html",
-});
+/** @param {string} targetPath @param {string} outputDirectory */
+function writeConfig(targetPath, outputDirectory) {
+  const config = {
+    $schema: "https://openapi.vercel.sh/vercel.json",
+    framework: "vite",
+    outputDirectory,
+    rewrites: buildRewrites(),
+  };
+  fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+}
 
-const config = {
-  $schema: "https://openapi.vercel.sh/vercel.json",
-  framework: "vite",
-  buildCommand: "node scripts/write-vercel-config.mjs && vite build",
-  outputDirectory: "dist",
-  rewrites,
-};
+writeConfig(path.join(frontendRoot, "vercel.json"), "dist");
+writeConfig(path.join(repoRoot, "vercel.json"), "frontend/dist");
 
-fs.writeFileSync(
-  path.join(root, "vercel.json"),
-  `${JSON.stringify(config, null, 2)}\n`,
-  "utf8",
-);
+if (apiProxy) {
+  const rootConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, "vercel.json"), "utf8"));
+  rootConfig.installCommand = "cd frontend && npm install";
+  rootConfig.buildCommand = "cd frontend && npm run build";
+  fs.writeFileSync(
+    path.join(repoRoot, "vercel.json"),
+    `${JSON.stringify(rootConfig, null, 2)}\n`,
+    "utf8",
+  );
+} else {
+  fs.writeFileSync(
+    path.join(repoRoot, "vercel.json"),
+    `${JSON.stringify(
+      {
+        $schema: "https://openapi.vercel.sh/vercel.json",
+        installCommand: "cd frontend && npm install",
+        buildCommand: "cd frontend && npm run build",
+        outputDirectory: "frontend/dist",
+        framework: "vite",
+        rewrites: [],
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+}
 
 console.log(
   apiProxy
     ? `[vercel] API proxy -> ${apiProxy}/api/*`
-    : "[vercel] No API_PROXY_URL; configure VITE_API_BASE_URL or add API_PROXY_URL in Vercel",
+    : "[vercel] SPA only (set API_PROXY_URL in Vercel for API proxy)",
 );

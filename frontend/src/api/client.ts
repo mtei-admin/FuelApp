@@ -39,7 +39,11 @@ export async function apiFetch<T>(
         detail = body.detail;
       }
     } catch {
-      // ignore JSON parse errors
+      if (response.status === 404) {
+        detail = "API not found. Ensure the backend is running and API_PROXY_URL is set.";
+      } else if (response.status === 502) {
+        detail = "Cannot reach the API server. Check that FastAPI is running and publicly reachable.";
+      }
     }
     throw new ApiError(response.status, detail);
   }

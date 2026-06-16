@@ -29,10 +29,14 @@ GitHub + Vercel (recommended)
 6. Deploy.
 
 If your API is only on a private LAN IP (e.g. 10.10.20.40), Vercel cannot
-proxy to it. Options:
-  - Use IIS + HTTPS on your server (see DEPLOYMENT.TXT) — no Vercel needed
-  - Expose API via Cloudflare Tunnel / ngrok with HTTPS
-  - Set VITE_API_BASE_URL to public API URL (requires CORS + cookie config on API)
+reach it from the public internet. Login on Vercel will fail with 502.
+
+Use one of these instead for on-prem / LAN:
+  - deploy\run_lan.bat  ->  http://SERVER-IP:8000  (React + API, no Vercel)
+  - IIS + HTTPS on your server (see DEPLOYMENT.TXT)
+
+To use Vercel with a private API, expose it first:
+  - Cloudflare Tunnel / ngrok with HTTPS, then set API_PROXY_URL to that URL
 
 CLI deploy
 ----------

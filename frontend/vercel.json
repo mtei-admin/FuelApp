@@ -2,6 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "outputDirectory": "dist",
-  "rewrites": [],
-  "buildCommand": "npm run build:vercel"
+  "functions": {
+    "api/[...path].js": {
+      "runtime": "edge"
+    }
+  }
 }

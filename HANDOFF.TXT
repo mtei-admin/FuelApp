@@ -108,11 +108,8 @@ React migration (Phase 4 complete — production):
 - LAN without IIS: deploy\run_lan.bat (port 8000). Legacy Streamlit: deploy\run_streamlit.bat (:8501).
 - Dev: deploy\run_api.bat + deploy\run_frontend.bat. See MIGRATION.TXT and DEPLOYMENT.TXT.
 
-GitHub + Vercel (2026-06-11):
-- Pushed to https://github.com/mtei-admin/FuelApp.git (master).
-- Vercel frontend: https://frontend-mteislips.vercel.app (project: mteislips/frontend).
-- Root vercel.json builds frontend/dist for GitHub deploys (commit 61b9922).
-- Set API_PROXY_URL in Vercel env for login (see VERCEL_DEPLOY.TXT).
-- Vercel Root Directory: leave blank (repo root) OR set to frontend.
-- If 404 persists: Vercel Settings -> Deployment Protection -> disable for Production.
+GitHub + Vercel:
+- Vercel frontend: https://frontend-lovat-beta-54.vercel.app (project: mteislips/frontend)
+- API_PROXY_URL (Production): https://fuelapp-api.mteinc.net
+- Tunnel DNS must resolve and cloudflared must be running for Vercel login to work
 

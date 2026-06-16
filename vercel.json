@@ -3,10 +3,5 @@
   "installCommand": "cd frontend && npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
-  "framework": "vite",
-  "functions": {
-    "frontend/api/[...path].js": {
-      "runtime": "edge"
-    }
-  }
+  "framework": "vite"
 }

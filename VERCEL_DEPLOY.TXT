@@ -36,9 +36,22 @@ Use one of these instead for on-prem / LAN:
   - IIS + HTTPS on your server (see DEPLOYMENT.TXT)
 
 To use Vercel with a private API, expose it first:
-  - Cloudflare Tunnel / ngrok with HTTPS, then set API_PROXY_URL to that URL
+  - Cloudflare Tunnel / ngrok with HTTPS (see TUNNEL_SETUP.TXT)
+  - Then set API_PROXY_URL in Vercel to the public HTTPS URL
+  - Do NOT use http://10.10.20.40:8000 — Vercel cannot reach private LAN IPs
 
-CLI deploy
+After your tunnel is live
+-------------------------
+1. Verify: https://YOUR-PUBLIC-API-URL/api/health
+2. Vercel dashboard -> Project frontend -> Settings -> Environment Variables:
+     API_PROXY_URL = https://YOUR-PUBLIC-API-URL
+3. Server .env:
+     APP_BASE_URL=https://frontend-lovat-beta-54.vercel.app
+4. Restart API on the server.
+5. Test: https://frontend-lovat-beta-54.vercel.app/api/health
+6. Log in on the Vercel URL.
+
+Full step-by-step: TUNNEL_SETUP.TXT
 ----------
   cd frontend
   npm install

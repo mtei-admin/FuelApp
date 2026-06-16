@@ -19,6 +19,7 @@
 - frontend/src/utils/download.ts: Browser blob download helper for PDF/CSV exports.
 - frontend/scripts/write-vercel-config.mjs: Generates vercel.json rewrites from API_PROXY_URL at build time.
 - frontend/vercel.json: Vercel deployment config (SPA + optional API proxy).
+- TUNNEL_SETUP.TXT: Expose on-prem API (Cloudflare Tunnel, ngrok) for Vercel API_PROXY_URL.
 - VERCEL_DEPLOY.TXT: Guide for deploying React frontend to Vercel with GitHub.
 - api/routers/requisitions.py: Fuel request submit, history, edit, form context, prior-approved check.
 - api/routers/approvals.py: Pending queue, approve/reject, quantity edit, pending count badge.
@@ -37,6 +38,7 @@
 - deploy/run_api.bat: Start FastAPI dev server on port 8000.
 - deploy/run_frontend.bat: Start Vite React dev server on port 5173.
 - frontend/: React + TypeScript SPA (auth, requests, approvals, purchasing, billing, reports, dashboard, master data).
+- deploy/setup_api.bat: One-shot API setup (deps, DB, frontend build) with start instructions.
 - deploy/build_frontend.bat: npm install and build React app to frontend/dist for production.
 - deploy/run_production.bat: FastAPI on 127.0.0.1:8000 for IIS reverse proxy (SERVE_FRONTEND=false).
 - deploy/run_lan.bat: FastAPI + React SPA on 0.0.0.0:8000 for LAN access without IIS.

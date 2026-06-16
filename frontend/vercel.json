@@ -1,10 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "outputDirectory": "dist",
-  "functions": {
-    "api/[...path].js": {
-      "runtime": "edge"
-    }
-  }
+  "outputDirectory": "dist"
 }

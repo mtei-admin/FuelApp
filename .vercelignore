@@ -1,0 +1,11 @@
+# Python API package — not Vercel serverless functions
+api/
+
+# Backend / dev files not needed for frontend deploy
+src/
+deploy/
+data/
+tests/
+backup_before_*/
+*.py
+!frontend/**

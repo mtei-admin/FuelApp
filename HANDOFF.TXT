@@ -111,7 +111,8 @@ React migration (Phase 4 complete — production):
 GitHub + Vercel (2026-06-11):
 - Pushed to https://github.com/mtei-admin/FuelApp.git (master).
 - Vercel frontend: https://frontend-mteislips.vercel.app (project: mteislips/frontend).
-- Root vercel.json added for GitHub deploys (output: frontend/dist); SPA rewrite fixed.
-- Set API_PROXY_URL in Vercel env to your public HTTPS API URL for login to work (see VERCEL_DEPLOY.TXT).
-- Vercel Root Directory: leave blank (repo root) OR set to frontend — both supported.
+- Root vercel.json builds frontend/dist for GitHub deploys (commit 61b9922).
+- Set API_PROXY_URL in Vercel env for login (see VERCEL_DEPLOY.TXT).
+- Vercel Root Directory: leave blank (repo root) OR set to frontend.
+- If 404 persists: Vercel Settings -> Deployment Protection -> disable for Production.
 

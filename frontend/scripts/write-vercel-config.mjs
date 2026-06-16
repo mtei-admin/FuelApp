@@ -24,47 +24,26 @@ function buildRewrites() {
   ];
 }
 
-/** @param {string} targetPath @param {string} outputDirectory */
-function writeConfig(targetPath, outputDirectory) {
+/** @param {string} targetPath @param {string} outputDirectory @param {boolean} isRepoRoot */
+function writeConfig(targetPath, outputDirectory, isRepoRoot = false) {
+  const rewrites = buildRewrites();
   const config = {
     $schema: "https://openapi.vercel.sh/vercel.json",
     framework: "vite",
     outputDirectory,
-    rewrites: buildRewrites(),
+    rewrites,
   };
+  if (isRepoRoot) {
+    config.installCommand = "cd frontend && npm install";
+    config.buildCommand = "cd frontend && npm run build:vercel";
+  } else {
+    config.buildCommand = "npm run build:vercel";
+  }
   fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
-writeConfig(path.join(frontendRoot, "vercel.json"), "dist");
-writeConfig(path.join(repoRoot, "vercel.json"), "frontend/dist");
-
-if (apiProxy) {
-  const rootConfig = JSON.parse(fs.readFileSync(path.join(repoRoot, "vercel.json"), "utf8"));
-  rootConfig.installCommand = "cd frontend && npm install";
-  rootConfig.buildCommand = "cd frontend && npm run build";
-  fs.writeFileSync(
-    path.join(repoRoot, "vercel.json"),
-    `${JSON.stringify(rootConfig, null, 2)}\n`,
-    "utf8",
-  );
-} else {
-  fs.writeFileSync(
-    path.join(repoRoot, "vercel.json"),
-    `${JSON.stringify(
-      {
-        $schema: "https://openapi.vercel.sh/vercel.json",
-        installCommand: "cd frontend && npm install",
-        buildCommand: "cd frontend && npm run build",
-        outputDirectory: "frontend/dist",
-        framework: "vite",
-        rewrites: [],
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-}
+writeConfig(path.join(frontendRoot, "vercel.json"), "dist", false);
+writeConfig(path.join(repoRoot, "vercel.json"), "frontend/dist", true);
 
 console.log(
   apiProxy

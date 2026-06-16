@@ -40,9 +40,11 @@ export async function apiFetch<T>(
       }
     } catch {
       if (response.status === 404) {
-        detail = "API not found. Ensure the backend is running and API_PROXY_URL is set.";
+        detail =
+          "API route not found. Redeploy Vercel with Root Directory = frontend, or check vercel.json rewrites.";
       } else if (response.status === 502) {
-        detail = "Cannot reach the API server. Check that FastAPI is running and publicly reachable.";
+        detail =
+          "Cannot reach API server. Ensure cloudflared tunnel is running and fuelapp-api.mteinc.net resolves.";
       }
     }
     throw new ApiError(response.status, detail);

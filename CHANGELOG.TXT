@@ -1,4 +1,5 @@
 2026-06-11 | Deployment | Fix Vercel 404: root vercel.json for GitHub monorepo deploy, SPA rewrite /(.*) -> index.html.
+2026-06-17 | API | Add GET / root response in production API-only mode (run_production); add deploy/check_tunnel_dns.bat.
 2026-06-17 | Deployment | Add deploy/stop_api.bat; expand TUNNEL_SETUP.TXT with DNS and Vercel 502 troubleshooting.
 2026-06-17 | Deployment | Fix Vercel GitHub build: remove invalid functions runtime from vercel.json; add .vercelignore for Python api/ package.
 2026-06-16 | Deployment | Added TUNNEL_SETUP.TXT for exposing on-prem API to Vercel via Cloudflare Tunnel or port forward; updated VERCEL_DEPLOY.TXT checklist.

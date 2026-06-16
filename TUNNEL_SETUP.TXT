@@ -147,14 +147,15 @@ Troubleshooting
     4. Restart cloudflared after config/DNS changes
 
   DNS for fuelapp-api.mteinc.net (tunnel cbba9bda-5122-41b9-96a6-94c2b5594683)
-    At your DNS host for mteinc.net, add:
+    mteinc.net uses CrazyDomains (ns1.crazydomains.com) — add CNAME in their dashboard:
       Type:   CNAME
       Name:   fuelapp-api
       Target: cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
     Wait 5–30 minutes for propagation, then test:
       https://fuelapp-api.mteinc.net/api/health
+      deploy\check_tunnel_dns.bat
 
-    If mteinc.net is on Cloudflare, you can instead run:
+    If mteinc.net is on Cloudflare instead, run:
       cloudflared tunnel route dns fuelapp-api fuelapp-api.mteinc.net
 
   "Cannot determine default origin certificate path" / "No file cert.pem"

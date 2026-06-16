@@ -74,6 +74,25 @@ def health_check() -> dict:
     return {"status": "ok", "service": "fuel-api"}
 
 
+@app.get("/", include_in_schema=False)
+def api_root() -> dict:
+    """
+    Root response when SERVE_FRONTEND is off (run_production / tunnel mode).
+
+    The React UI is served by IIS, Vercel, or run_lan.bat — not this endpoint.
+    """
+    if should_serve_frontend():
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Not found")
+    return {
+        "status": "ok",
+        "service": "fuel-api",
+        "health": "/api/health",
+        "hint": "API only. Use run_lan.bat for UI on this server, or Vercel/IIS for production UI.",
+    }
+
+
 def _mount_frontend_spa() -> None:
     """Serve React build for LAN mode (IIS serves static files in production)."""
     assets_dir = FRONTEND_DIST / "assets"

@@ -41,6 +41,7 @@
 - deploy/setup_api.bat: One-shot API setup (deps, DB, frontend build) with start instructions.
 - deploy/build_frontend.bat: npm install and build React app to frontend/dist for production.
 - deploy/run_production.bat: FastAPI on 127.0.0.1:8000 for IIS reverse proxy (SERVE_FRONTEND=false).
+- deploy/check_tunnel_dns.bat: Prints tunnel CNAME instructions and tests fuelapp-api.mteinc.net DNS.
 - deploy/stop_api.bat: Stops all processes listening on TCP port 8000 (production/LAN API).
 - deploy/run_lan.bat: FastAPI + React SPA on 0.0.0.0:8000 for LAN access without IIS.
 - deploy/run_streamlit.bat: Legacy Streamlit UI on 127.0.0.1:8501 (deprecated).

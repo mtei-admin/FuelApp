@@ -1,175 +1,112 @@
 ================================================================================
-TUNNEL / PORT FORWARD — Expose API for Vercel
+TUNNEL / PORT FORWARD — Expose API for Vercel (CrazyDomains DNS)
 ================================================================================
 
-Goal: Vercel (public cloud) must reach your FastAPI on 10.10.20.40:8000 via a
-public HTTPS URL. Set that URL as API_PROXY_URL in Vercel.
+Goal: Browsers reach your FastAPI on 10.10.20.40:8000 via a public HTTPS URL.
+DNS stays at CrazyDomains. Cloudflare is used only for cloudflared tunnel (free
+HTTPS, no open firewall port). You do NOT need to move nameservers to Cloudflare.
 
-Recommended: Cloudflare Tunnel (free HTTPS, no open firewall port)
--------------------------------------------------------------------
+Vercel setup: browser calls the API directly (VITE_API_BASE_URL), not through
+Vercel /api rewrites. See VERCEL_DEPLOY.TXT.
 
-1. On the Windows server (10.10.20.40), ensure API is running:
+Recommended: Cloudflare Tunnel + CrazyDomains CNAME
+---------------------------------------------------
+
+1. API on the Windows server:
      deploy\run_production.bat
-   (listens on 127.0.0.1:8000 — tunnel points to http://127.0.0.1:8000)
+   (listens on 127.0.0.1:8000)
 
 2. Install cloudflared:
      https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
-   Add cloudflared to PATH, or run from its install folder.
 
-3. Log in to Cloudflare (REQUIRED before tunnel create):
+3. Log in (required before tunnel create):
      cloudflared tunnel login
 
-   - A browser window opens — log in to your Cloudflare account.
-   - Select the domain you will use (e.g. yourcompany.com).
-   - On success, cert.pem is saved to:
-       C:\Users\<you>\.cloudflared\cert.pem
-
-   If you see "Cannot determine default origin certificate path" or
-   "No file cert.pem", you skipped this step. Run login first.
-
-4. Create the tunnel (only after login succeeds):
+4. Create tunnel:
      cloudflared tunnel create fuelapp-api
+   Note Tunnel ID (e.g. cbba9bda-5122-41b9-96a6-94c2b5594683).
 
-   Note the Tunnel ID printed (e.g. a1b2c3d4-e5f6-...).
-   A credentials JSON file is created in .cloudflared\
-
-5. Configure ingress — create config file:
+5. Local config (credentials only after dashboard migration):
      C:\Users\<you>\.cloudflared\config.yml
 
      tunnel: <TUNNEL-ID>
      credentials-file: C:\Users\<you>\.cloudflared\<TUNNEL-ID>.json
-     ingress:
-       - hostname: fuel-api.yourdomain.com
-         service: http://127.0.0.1:8000
-       - service: http_status:404
+     # Ingress: Zero Trust -> Tunnels -> fuelapp-api -> Published application routes
 
-6. Route DNS to the tunnel:
-     cloudflared tunnel route dns fuelapp-api fuel-api.yourdomain.com
+6. Published application route (Cloudflare Zero Trust dashboard):
+     Hostname: fuelapp-api.mteinc.net
+     Service:  http://127.0.0.1:8000
+     Path:     *
 
-   Or add a CNAME manually in Cloudflare dashboard.
+7. DNS at CrazyDomains (nameservers stay ns1/ns2.crazydomains.com):
+     Type:   CNAME
+     Name:   fuelapp-api
+     Target: cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
+   Do NOT use cloudflared tunnel route dns (requires Cloudflare-hosted zone).
 
-7. Run the tunnel:
+8. Run tunnel:
      cloudflared tunnel run fuelapp-api
 
-   Leave this window open, or install as a Windows service (see Cloudflare docs).
-
-8. Test from any PC:
-     https://fuel-api.yourdomain.com/api/health
+9. Test (mobile data or DNS 8.8.8.8):
+     https://fuelapp-api.mteinc.net/api/health
    Expected: {"status":"ok","service":"fuel-api"}
 
-9. Update Vercel (Production environment variable):
-     API_PROXY_URL = https://fuelapp-api.mteinc.net
-   (no trailing slash, no /api suffix)
+10. Server .env:
+      APP_BASE_URL=https://frontend-lovat-beta-54.vercel.app
+      CORS_ORIGINS=https://frontend-lovat-beta-54.vercel.app
+      SESSION_COOKIE_SECURE=true
+      SESSION_COOKIE_SAMESITE=none
 
-10. Update server .env:
-     APP_BASE_URL=https://frontend-lovat-beta-54.vercel.app
-   (or your Vercel production URL — used for password-reset emails)
+11. Vercel environment (Production):
+      VITE_API_BASE_URL=https://fuelapp-api.mteinc.net
+    Delete API_PROXY_URL if present. Redeploy.
 
-11. Restart API after .env changes.
-
-12. Test Vercel login:
-      https://frontend-lovat-beta-54.vercel.app
-      https://frontend-lovat-beta-54.vercel.app/api/health
+12. Test login: https://frontend-lovat-beta-54.vercel.app
 
 
-Domain hosted elsewhere (not on Cloudflare)
--------------------------------------------
-You do NOT need to move your main website. You only need a public HTTPS URL
-for the API. Pick one option:
-
-OPTION A — Add domain to Cloudflare (DNS only for a subdomain)  [recommended]
-  Your main site can stay on its current host (Wix, GoDaddy, IIS, etc.).
-  1. Create a free Cloudflare account and add your domain.
-  2. Either:
-     - Change nameservers to Cloudflare, then recreate your existing DNS
-       records (A/CNAME) so the main site still points to the old host, OR
-     - Use Cloudflare partial/CNAME setup if offered for your registrar.
-  3. Add ONE new record for the API only, e.g.:
-       fuel-api.yourdomain.com  ->  tunnel (CNAME to <tunnel-id>.cfargotunnel.com)
-  4. Main site (www.yourdomain.com) unchanged — only the API subdomain uses
-     the tunnel.
-
-OPTION B — Subdomain at your current DNS host (no nameserver change)
-  1. Create the tunnel in Cloudflare (login still required).
-  2. After: cloudflared tunnel create fuelapp-api
-     note the Tunnel ID.
-  3. At your current DNS provider (where the domain already lives), add:
-       Type:   CNAME
-       Name:   fuel-api   (or api)
-       Target: <TUNNEL-ID>.cfargotunnel.com
-  4. Skip: cloudflared tunnel route dns (that only works for zones on Cloudflare).
-  5. Use https://fuel-api.yourdomain.com as API_PROXY_URL in Vercel.
-
-  Note: cloudflared tunnel login still needs you to authorize a zone in
-  Cloudflare. If the domain is not in Cloudflare at all, use Option C or D.
-
-OPTION C — No custom domain (quick test)
-  cloudflared tunnel --url http://127.0.0.1:8000
-  Gives a temporary URL like https://random-words.trycloudflare.com
-  Use that as API_PROXY_URL in Vercel. URL changes each time you restart.
-
-OPTION D — ngrok (easiest if domain is not on Cloudflare)
-  ngrok http 8000
-  Use the https://xxxx.ngrok-free.app URL as API_PROXY_URL.
-  No domain or Cloudflare account required.
-
-
-Alternative: ngrok
-------------------
-  ngrok http 8000
-  Use the https://xxxx.ngrok-free.app URL as API_PROXY_URL in Vercel.
-  Note: free ngrok URLs change on restart unless you use a reserved domain.
-
-
-Alternative: Router port forward (not recommended)
---------------------------------------------------
-  Forward public IP:8000 -> 10.10.20.40:8000
-  Use http://YOUR-PUBLIC-IP:8000 as API_PROXY_URL only if you cannot use HTTPS.
-  Prefer HTTPS tunnel instead (cookies and security).
-
-
-Checklist before testing Vercel login
+Alternative: ngrok (no custom domain)
 -------------------------------------
-  [ ] API running on server (deploy\run_production.bat or Windows service)
-  [ ] Tunnel/forward targets http://127.0.0.1:8000
-  [ ] Public URL returns /api/health JSON
-  [ ] Vercel API_PROXY_URL = public HTTPS base URL (not 10.10.20.40)
-  [ ] Admin user exists (init_admin.py)
-  [ ] Vercel /api/health works in browser
+  ngrok http 8000
+  VITE_API_BASE_URL=https://xxxx.ngrok-free.app
+  Update CORS_ORIGINS and redeploy Vercel.
+
+
+LAN / on-prem (no tunnel, no Vercel)
+------------------------------------
+  deploy\run_lan.bat  ->  http://10.10.20.40:8000
+
+
+Checklist before Vercel login
+-----------------------------
+  [ ] API running (deploy\run_production.bat)
+  [ ] cloudflared tunnel run fuelapp-api
+  [ ] CrazyDomains CNAME fuelapp-api -> <tunnel-id>.cfargotunnel.com
+  [ ] https://fuelapp-api.mteinc.net/api/health returns JSON
+  [ ] Vercel VITE_API_BASE_URL set; API_PROXY_URL removed
+  [ ] Server .env CORS + SESSION_COOKIE_SAMESITE=none
+  [ ] Vercel redeployed after env changes
 
 
 Troubleshooting
 ---------------
   "Cannot reach API server" on Vercel login
-    1. API running: deploy\run_production.bat (127.0.0.1:8000)
-    2. config.yml must be at C:\Users\<you>\.cloudflared\config.yml (NOT config.yml.txt)
-    3. DNS must exist for fuelapp-api.mteinc.net — see DNS section below
-    4. Restart cloudflared after config/DNS changes
+    1. Test API directly: https://fuelapp-api.mteinc.net/api/health
+    2. Vercel must have VITE_API_BASE_URL (not API_PROXY_URL / no /api rewrite)
+    3. API running; cloudflared running; CrazyDomains CNAME correct
 
-  DNS for fuelapp-api.mteinc.net (tunnel cbba9bda-5122-41b9-96a6-94c2b5594683)
-    mteinc.net uses CrazyDomains (ns1.crazydomains.com) — add CNAME in their dashboard:
-      Type:   CNAME
-      Name:   fuelapp-api
-      Target: cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
-    Wait 5–30 minutes for propagation, then test:
-      https://fuelapp-api.mteinc.net/api/health
-      deploy\check_tunnel_dns.bat
+  502 DNS_HOSTNAME_EMPTY on Vercel /api/*
+    You are still using Vercel /api rewrites. Remove them; use VITE_API_BASE_URL
+    so the browser calls the API directly. See VERCEL_DEPLOY.TXT.
 
-    If mteinc.net is on Cloudflare instead, run:
-      cloudflared tunnel route dns fuelapp-api fuelapp-api.mteinc.net
+  DNS works on Google (8.8.8.8) but office PC shows NXDOMAIN
+    Internal DNS (e.g. 10.10.20.3) lacks the CNAME. Add it there or use 8.8.8.8.
 
-  "Cannot determine default origin certificate path" / "No file cert.pem"
-    Run:  cloudflared tunnel login
-    Then retry:  cloudflared tunnel create fuelapp-api
-
-  502 on Vercel /api/*
-    Tunnel down, wrong API_PROXY_URL, or API not running on server.
-
-  Login returns 401
-    Wrong username/password. Run init_admin.py if no users exist.
+  502 from https://fuelapp-api.mteinc.net
+    Check Published application routes in Zero Trust; restart cloudflared;
+    curl http://127.0.0.1:8000/api/health
 
   Login succeeds then immediately logs out
-  Cookie issue — ensure APP_BASE_URL on server uses https:// Vercel URL.
+    Set SESSION_COOKIE_SAMESITE=none and SESSION_COOKIE_SECURE=true on server.
 
 See also: VERCEL_DEPLOY.TXT, DEPLOYMENT.TXT
 

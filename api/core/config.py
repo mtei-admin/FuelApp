@@ -47,6 +47,19 @@ def get_session_cookie_secure() -> bool:
     return is_https_base_url()
 
 
+def get_session_cookie_samesite() -> str:
+    """
+    SameSite policy for the session cookie.
+
+    Use SESSION_COOKIE_SAMESITE=none when the React app (e.g. Vercel) and API
+  (e.g. fuelapp-api.mteinc.net) are on different sites. Requires Secure=true.
+    """
+    explicit = os.environ.get("SESSION_COOKIE_SAMESITE", "").lower()
+    if explicit in ("lax", "strict", "none"):
+        return explicit
+    return "lax"
+
+
 def get_cors_origins() -> list[str]:
     """CORS allowlist for dev servers and the configured public base URL."""
     origins = [origin.strip() for origin in CORS_ORIGINS if origin.strip()]

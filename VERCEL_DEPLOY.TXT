@@ -6,67 +6,57 @@ Vercel hosts the React UI only. The FastAPI backend + SQLite database must run
 on your Windows server (deploy\run_production.bat or IIS). Vercel cannot run
 the Python API or local database.
 
-Architecture
-------------
-  Browser -> https://your-app.vercel.app  (React static site)
-                |
-                +-- /api/*  ->  your public API URL  (rewrite proxy)
+Architecture (CrazyDomains DNS — recommended for this project)
+------------------------------------------------------------
+  Browser -> https://your-app.vercel.app     (React static site from Vercel)
+         \
+          `--> https://fuelapp-api.mteinc.net/api/*   (direct API calls)
 
-  Recommended: set API_PROXY_URL in Vercel so /api calls are same-origin
-  (session cookies work). Your API must be reachable over HTTPS from the internet.
+  The browser calls the API directly (VITE_API_BASE_URL). Do NOT use Vercel
+  /api rewrites to the tunnel hostname — Vercel returns 502 DNS_HOSTNAME_EMPTY
+  when CrazyDomains CNAME points to *.cfargotunnel.com (private tunnel DNS).
 
-GitHub + Vercel (recommended)
------------------------------
-1. Push this repo to GitHub (already configured: mtei-admin/FuelApp).
-2. Go to https://vercel.com/new
-3. Import the GitHub repository mtei-admin/FuelApp.
-4. Root Directory (important for GitHub project fuel-app):
-     - Set to frontend  (recommended — uses frontend/vercel.json + frontend/api proxy)
-     - OR leave blank (uses root vercel.json; builds frontend/dist)
-   Do not use vercel.json "functions" runtime block — edge runtime is set in
-   frontend/api/[...path].js only.
-5. Environment variables (Production):
-     API_PROXY_URL = https://your-public-api-host
-6. Deploy.
+  DNS stays at CrazyDomains. Cloudflare is only used for cloudflared tunnel
+  (no nameserver change required). See TUNNEL_SETUP.TXT.
 
-If your API is only on a private LAN IP (e.g. 10.10.20.40), Vercel cannot
-reach it from the public internet. Login on Vercel will fail with 502.
+Vercel environment variables (Production)
+-----------------------------------------
+  VITE_API_BASE_URL = https://fuelapp-api.mteinc.net
 
-Use one of these instead for on-prem / LAN:
-  - deploy\run_lan.bat  ->  http://SERVER-IP:8000  (React + API, no Vercel)
-  - IIS + HTTPS on your server (see DEPLOYMENT.TXT)
+  Delete API_PROXY_URL if present (not used; caused DNS_HOSTNAME_EMPTY when set
+  to a private LAN IP).
 
-To use Vercel with a private API, expose it first:
-  - Cloudflare Tunnel / ngrok with HTTPS (see TUNNEL_SETUP.TXT)
-  - Then set API_PROXY_URL in Vercel to the public HTTPS URL
-  - Do NOT use http://10.10.20.40:8000 — Vercel cannot reach private LAN IPs
+Server .env (API host on 10.10.20.40)
+-------------------------------------
+  APP_BASE_URL=https://frontend-lovat-beta-54.vercel.app
+  CORS_ORIGINS=https://frontend-lovat-beta-54.vercel.app
+  SESSION_COOKIE_SECURE=true
+  SESSION_COOKIE_SAMESITE=none
 
-After your tunnel is live
+  Restart API after .env changes: deploy\run_production.bat
+
+GitHub + Vercel
+---------------
+1. Import repo mtei-admin/FuelApp at https://vercel.com/new
+2. Root Directory: frontend (or blank — uses root vercel.json)
+3. Add VITE_API_BASE_URL (see above). Remove API_PROXY_URL.
+4. Deploy.
+
+After tunnel is live
+--------------------
+1. https://fuelapp-api.mteinc.net/api/health  (mobile data or DNS 8.8.8.8)
+2. Log in at https://frontend-lovat-beta-54.vercel.app
+
+LAN / on-prem (no Vercel)
 -------------------------
-1. Verify: https://YOUR-PUBLIC-API-URL/api/health
-2. Vercel dashboard -> Project frontend -> Settings -> Environment Variables:
-     API_PROXY_URL = https://YOUR-PUBLIC-API-URL
-3. Server .env:
-     APP_BASE_URL=https://frontend-lovat-beta-54.vercel.app
-4. Restart API on the server.
-5. Test: https://frontend-lovat-beta-54.vercel.app/api/health
-6. Log in on the Vercel URL.
+  deploy\run_lan.bat  ->  http://10.10.20.40:8000
 
-Full step-by-step: TUNNEL_SETUP.TXT
+CLI deploy
 ----------
   cd frontend
-  npm install
-  set API_PROXY_URL=https://your-public-api-host
+  set VITE_API_BASE_URL=https://fuelapp-api.mteinc.net
   npx vercel --prod
 
-Local .env for Vercel CLI (optional, frontend/.env.production.local):
-  API_PROXY_URL=https://your-public-api-host
-
-Server-side (API host) — add Vercel origin to CORS if using VITE_API_BASE_URL:
-  CORS_ORIGINS=https://your-app.vercel.app
-
-Update APP_BASE_URL on the server .env to match your public URL for emails.
-
-See also: DEPLOYMENT.TXT, MIGRATION.TXT
+See also: TUNNEL_SETUP.TXT, DEPLOYMENT.TXT, MIGRATION.TXT
 
 ================================================================================

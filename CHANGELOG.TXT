@@ -1,3 +1,7 @@
+2026-06-24 | Deployment | Push: direct Vercel→tunnel API client, cross-origin session cookies, remove edge proxy; docs for CrazyDomains DNS.
+2026-06-23 | Deployment | Fix API startup IndentationError in auth.py; fix .env CORS_ORIGINS typo (==).
+2026-06-23 | Deployment | CrazyDomains + Vercel: direct API via VITE_API_BASE_URL (no Vercel /api rewrite); SESSION_COOKIE_SAMESITE=none for cross-origin auth; updated TUNNEL_SETUP.TXT and VERCEL_DEPLOY.TXT.
+2026-06-17 | Deployment | Fix Vercel 502 DNS_HOSTNAME_EMPTY: remove edge API proxy (private LAN API_PROXY_URL); static vercel.json rewrites only; fix .vercelignore to exclude /api/ not frontend/api.
 2026-06-11 | Deployment | Fix Vercel 404: root vercel.json for GitHub monorepo deploy, SPA rewrite /(.*) -> index.html.
 2026-06-17 | API | Add GET / root response in production API-only mode (run_production); add deploy/check_tunnel_dns.bat.
 2026-06-17 | Deployment | Add deploy/stop_api.bat; expand TUNNEL_SETUP.TXT with DNS and Vercel 502 troubleshooting.

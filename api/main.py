@@ -1,4 +1,5 @@
 """FastAPI application entry point."""
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,6 +8,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+# PDF service imports src.modules.purchasing (Streamlit UI); suppress harmless cache warning.
+logging.getLogger("streamlit.runtime.caching.cache_data_api").setLevel(logging.ERROR)
 
 # Ensure project root is on sys.path when running: uvicorn api.main:app
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

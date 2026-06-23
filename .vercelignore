@@ -1,5 +1,5 @@
-# Python FastAPI package (not Vercel serverless)
-api/
+# Python FastAPI package at repo root only (not Vercel serverless)
+/api/
 
 # Backend not needed for frontend static deploy
 src/

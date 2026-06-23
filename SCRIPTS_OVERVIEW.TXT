@@ -18,7 +18,7 @@
 - frontend/src/api/dashboard.ts: Dashboard API client.
 - frontend/src/utils/download.ts: Browser blob download helper for PDF/CSV exports.
 - frontend/scripts/write-vercel-config.mjs: Generates vercel.json rewrites from API_PROXY_URL at build time.
-- frontend/vercel.json: Vercel deployment config (SPA + optional API proxy).
+- frontend/.env.production: Production Vite env (VITE_API_BASE_URL for Vercel + CrazyDomains tunnel).
 - TUNNEL_SETUP.TXT: Expose on-prem API (Cloudflare Tunnel, ngrok) for Vercel API_PROXY_URL.
 - VERCEL_DEPLOY.TXT: Guide for deploying React frontend to Vercel with GitHub.
 - api/routers/requisitions.py: Fuel request submit, history, edit, form context, prior-approved check.

@@ -1,3 +1,4 @@
+2026-06-29 | Deployment | Fix Vercel build: remove framework:vite from root vercel.json; use npm --prefix frontend so /src/main.tsx resolves.
 2026-06-29 | Deployment | Server .env: APP_BASE_URL/CORS_ORIGINS -> fuel-app-two-rose.vercel.app; push docs; redeploy fuel-app on Vercel.
 2026-06-29 | Deployment | Push master (0042e37); Vercel production live at https://fuelapp.mteinc.net with direct API bundle (fuelapp-api.mteinc.net); HANDOFF updated.
 2026-06-24 | Deployment | Push: direct Vercel→tunnel API client, cross-origin session cookies, remove edge proxy; docs for CrazyDomains DNS.

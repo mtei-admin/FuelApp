@@ -109,9 +109,14 @@ React migration (Phase 4 complete — production):
 - Dev: deploy\run_api.bat + deploy\run_frontend.bat. See MIGRATION.TXT and DEPLOYMENT.TXT.
 
 GitHub + Vercel (CrazyDomains DNS):
-- Vercel frontend: https://frontend-lovat-beta-54.vercel.app (project: mteislips/frontend)
-- Browser calls API directly (client.ts + frontend/.env.production); no Vercel /api rewrite
+- Production frontend: https://fuel-app-two-rose.vercel.app (mteislips/fuel-app)
+- Also: https://fuelapp.mteinc.net, https://frontend-lovat-beta-54.vercel.app
+- Server .env: APP_BASE_URL + CORS_ORIGINS=https://fuel-app-two-rose.vercel.app
+- Git: master at 0042e37 (pushed 2026-06-29); code at 95f612e (direct API + cross-origin cookies)
+- Live bundle verified: VITE_API_BASE_URL=https://fuelapp-api.mteinc.net in index-yO30KNa3.js
 - Vercel env: VITE_API_BASE_URL=https://fuelapp-api.mteinc.net; API_PROXY_URL removed
+- Deploy note: CLI uploads may stall (UNKNOWN); redeploy of Ready build or dist upload works
+- GitHub auto-deploy from master may Error — use Vercel dashboard Redeploy or CLI redeploy if needed
 - Server .env: CORS_ORIGINS + SESSION_COOKIE_SAMESITE=none + SESSION_COOKIE_SECURE=true
 - CrazyDomains CNAME: fuelapp-api -> cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
 - Local admin user seeded (superuser); use deploy\stop_api.bat before run_production.bat if port 8000 busy

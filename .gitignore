@@ -28,3 +28,4 @@ __dummy__.ipynb
 
 # Backup snapshots (local only)
 backup_before_*/
+.vercel

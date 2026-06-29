@@ -1,3 +1,5 @@
+2026-06-29 | Deployment | Server .env: APP_BASE_URL/CORS_ORIGINS -> fuel-app-two-rose.vercel.app; push docs; redeploy fuel-app on Vercel.
+2026-06-29 | Deployment | Push master (0042e37); Vercel production live at https://fuelapp.mteinc.net with direct API bundle (fuelapp-api.mteinc.net); HANDOFF updated.
 2026-06-24 | Deployment | Push: direct Vercel→tunnel API client, cross-origin session cookies, remove edge proxy; docs for CrazyDomains DNS.
 2026-06-23 | Deployment | Fix API startup IndentationError in auth.py; fix .env CORS_ORIGINS typo (==).
 2026-06-23 | Deployment | CrazyDomains + Vercel: direct API via VITE_API_BASE_URL (no Vercel /api rewrite); SESSION_COOKIE_SAMESITE=none for cross-origin auth; updated TUNNEL_SETUP.TXT and VERCEL_DEPLOY.TXT.

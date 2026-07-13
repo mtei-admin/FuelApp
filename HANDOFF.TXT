@@ -1,4 +1,15 @@
 Current State:
+- Master Data: Vendors, Companies, Vehicles, Users tabs. Companies table seeded (MTEI, DSRDC, DIC, GCEIC, MTEI Trucking); vehicle/encoder use company code from DB (Option A text links). PDF logos/headers still hardcoded.
+- Vehicle plate numbers: letters, numbers, hyphen, spaces, and "&" only (reject other specials); unique; always uppercase on save (React Master Data, API, DB, Streamlit).
+- Encoder role (renamed from user): Requests (own + pending edit only); Encode menu — Released PO receipt + CC fills, filtered by users.company / vehicle company; cannot edit after received.
+- Credit card workflow: requestor/purchaser choose payment method; CC Fills (approved → record fill → paid_cc, no PO); Billing → CC Reconciliation against statement; vendor path unchanged.
+- Sessions: 60 min idle logout (no API calls); expires at workday end (default 18:00 local); IP updated on each authenticated request; Active Users shows single current IP.
+- React Purchasing: sidebar collapsible submenu (Approved, CC Fills, PO Generated, Released, Received) with live count badges; nested routes /purchasing/*.
+- Approved (Generate PO) table shows Requestor Details (requestor_name / requester_name) instead of editable PO No.; PO number auto-assigns on Generate.
+- Remote access (CONFIRMED WORKING 2026-07-13): IIS LAN + Cloudflare Tunnel, same URL https://fuelapp.mteinc.net. Public NS at Cloudflare (skip/sasha); office DNS A → 10.10.20.40. Tunnel origin must be http://127.0.0.1:80 + Host header fuelapp.mteinc.net (https://127.0.0.1:443 caused mobile 502/Host Error). Guide: REMOTE_ACCESS.TXT. Vercel+API tunnel is legacy (TUNNEL_SETUP.TXT).
+- Record Receipt dialog: optional Remarks/Notes (receiving_remarks); Update/receive fixed (missing Optional import in api/schemas/receiving.py).
+- React Billing: sidebar submenu (Vendor Invoices, CC Reconciliation) with count badges; nested routes /billing/*.
+
 - ALL PHASES COMPLETE: All 6 development phases from roadmap.txt are fully implemented and functional. The system is production-ready with a complete end-to-end workflow.
 
 - Core Infrastructure (Phases 1-3):
@@ -26,6 +37,7 @@ Current State:
   * Once per session, purchaser is prompted \"Do you have fuel price updates?\" If Yes, dialog opens with one tab per vendor; each tab has Diesel/Unleaded/Premium (₱/liter) and Update button. Table vendor_fuel_prices stores per-vendor prices.
   * Receiving workflow to mark POs as received/delivered.
   * Download icon (📥) for PO PDFs, pricing display throughout.
+  * PO PDF is two-up on one letter page: top Vendors' Copy (black label), bottom DUPLICATE (red), dashed cut line; logos and content duplicated.
 
 - Billing Module:
   * Checkbox-based batch selection for received items.
@@ -33,7 +45,8 @@ Current State:
   * Status update to 'Billed' with invoice tracking.
 
 - Reports Module:
-  * Status-based summaries (Pending, Approved, PO Generated, Received, Billed).
+  * Status-based summaries (Pending, Approved, PO Generated, Released, Received, Billed, Cancelled, Paid CC).
+  * Filters: plate, vendor, status (single-select), from/to date; CSV/PDF use same filters.
   * Cost totals and grand totals per status group.
   * Billed items sorted by invoice number.
 
@@ -81,16 +94,66 @@ Current State:
   * test_runner.py available for running test suite.
 
 Pending Tasks:
+- Optional: Cloudflare Access in front of public fuelapp; install_cloudflared_service.ps1 if tunnel not yet a Windows service.
 - Optional enhancements: Further PO PDF template styling refinements, persist PDFs to disk/DB if archival needed.
 - Testing: Expand unit tests for DB helpers, auth flows, status transitions, role checks.
 - Reporting enhancements: Add date range filters, CSV export functionality, more detailed analytics.
 - Data validation: Add comprehensive input validation and error handling improvements.
 
 Next Steps:
+- Optional: Cloudflare Access for remote users; ensure cloudflared auto-starts after reboot.
 - If needed: Add invoice amounts/dates to billing module for more detailed financial tracking.
 - Testing: Harden role checks, add comprehensive unit tests for all DB operations and business logic.
 - Reporting: Implement date range filters, CSV export, enhanced dashboard analytics.
 - Performance: Consider caching optimizations for large datasets if performance issues arise.
+
+Session note (2026-07-08 — Encoder role):
+- Role renamed user → encoder (DB migration on init_database); UI label "Encoder".
+- Encoder: Requests unchanged (own + pending only, one-time edit); new Encode menu — Released PO receipt + CC fills, filtered by users.company.
+- Encoder cannot edit received items; purchasers retain post-received edit until billed.
+- users.company required for encoder enroll; Master Data Users tab has company dropdown.
+- API: /api/encoder/*; React routes /encode/released, /encode/cc-fills.
+- Assign company to existing encoder accounts (seed_users.json updated with MTEI default).
+- Rebuild: deploy\build_frontend.bat; restart API after backend changes.
+
+Session note (2026-07-06 — Audit trail):
+- audit_log table + src/audit.py; logs requisition, vehicle, vendor, user, fuel_price changes via API services.
+- GET /api/audit (accounting + superuser); Master Data > Audit Trail tab in React.
+- Historical changes before deploy are not backfilled; only new edits are captured.
+- Rebuild: deploy\build_frontend.bat; restart API after backend changes.
+
+Session note (2026-07-03 — Purchasing receive + Billing redesign):
+- Receive dialog on Purchasing: receipt #, received date, actual qty (decimals), actual unit price; total = qty × price.
+- PO unit_price preserved; actual_unit_price stored separately. Works for numeric and FULLTANK requests.
+- Purchaser can edit received items until status is billed (PATCH /api/purchasing/{id}/receiving).
+- Billing: actual qty/price read-only; Vendor Billing Reference # required on mark-billed (stored as invoice_number).
+- DB columns: actual_unit_price, actual_quantity, receipt_number, received_date (auto-migrated on init_database).
+- Rebuild: deploy\build_frontend.bat; restart API after backend changes.
+
+Session note (2026-07-13 — remote access dual-path CONFIRMED):
+- CrazyDomains NS → Cloudflare (skip.ns / sasha.ns); zone Active; MX/attendancehub in Cloudflare DNS.
+- Tunnel fuelapp Healthy; published route http://127.0.0.1:80 + HTTP Host Header fuelapp.mteinc.net.
+- Mobile data login works; office still uses internal A → 10.10.20.40.
+- Docs: REMOTE_ACCESS.TXT (primary). TUNNEL_SETUP.TXT / VERCEL_DEPLOY.TXT marked legacy/optional.
+- .env: APP_BASE_URL=https://fuelapp.mteinc.net, SameSite=lax.
+
+Session note (2026-07-09 — logged-in user + active sessions):
+- Sidebar (all users): avatar initials, full name, role badge.
+- Dashboard > Active Users (superuser only): online within 15 min idle; one row per user; "N devices"; IP column.
+- API: GET /api/dashboard/active-users; session last_seen_at updated on each authenticated request; IP stored at login.
+- Restart API after deploy; users must re-login once for IP addresses on old sessions.
+
+Session note (2026-07-01 — IIS office deployment, CONFIRMED WORKING):
+- https://fuelapp.mteinc.net — login and app functional via IIS + same-origin /api proxy.
+- Keep deploy\run_production.bat (or NSSM service) running after reboots.
+- frontend/.env.production: VITE_API_BASE_URL empty for IIS; rebuild with deploy\build_frontend.bat after frontend changes.
+
+Session note (2026-07-01 — IIS office deployment):
+- IIS URL: https://fuelapp.mteinc.net (internal DNS 10.10.20.3 → 10.10.20.40). IIS serves frontend/dist; /api/* proxies to 127.0.0.1:8000.
+- Login fix: frontend must use same-origin /api on fuelapp.mteinc.net (not fuelapp-api.mteinc.net). Rebuild with deploy\build_frontend.bat after client.ts changes.
+- frontend/.env.production: VITE_API_BASE_URL empty for IIS; Vercel sets it in dashboard only.
+- API: deploy\run_production.bat (or NSSM service). Verify https://fuelapp.mteinc.net/api/health returns {"status":"ok"}.
+- Self-signed cert: office PCs must trust cert or use GPO; "Not secure" is expected until trusted.
 
 Session note (2026-04-30):
 - Ran cleanup_all_transactions.py successfully; all transactional data cleared (requests, POs, fuel prices, reset tokens, sessions). Master data (users, vendors, vehicles) retained. Next requisition serial starts at 00001.

@@ -1,16 +1,38 @@
 ================================================================================
-TUNNEL / PORT FORWARD — Expose API for Vercel (CrazyDomains DNS)
+TUNNEL / PORT FORWARD — Legacy API tunnel for Vercel
 ================================================================================
 
-Goal: Browsers reach your FastAPI on 10.10.20.40:8000 via a public HTTPS URL.
-DNS stays at CrazyDomains. Cloudflare is used only for cloudflared tunnel (free
-HTTPS, no open firewall port). You do NOT need to move nameservers to Cloudflare.
+PRIMARY remote access (office + off-site, one URL)
+------------------------------------------------
+  Use REMOTE_ACCESS.TXT instead of this file.
+
+  Office:  https://fuelapp.mteinc.net → internal DNS → IIS
+  Remote:  https://fuelapp.mteinc.net → Cloudflare Tunnel → same IIS
+
+  Scripts: deploy\run_remote_tunnel.bat, deploy\install_cloudflared_service.ps1,
+           deploy\cloudflared.config.example.yml, deploy\check_tunnel_dns.bat
+
+
+This file (legacy)
+------------------
+  Documents the older pattern: Vercel hosts React; browser calls a separate
+  API hostname (fuelapp-api.mteinc.net) through a tunnel to uvicorn :8000.
+  Keep for reference if you still use Vercel previews. Do not use as the
+  primary path for staff (A–B remote users).
+
+
+Goal (legacy Vercel)
+--------------------
+  Browsers reach FastAPI on 10.10.20.40:8000 via a public HTTPS URL.
+  DNS stays at CrazyDomains unless you move the API subdomain to Cloudflare.
+  Cloudflare Tunnel provides HTTPS without opening a firewall port.
+
 
 Vercel setup: browser calls the API directly (VITE_API_BASE_URL), not through
 Vercel /api rewrites. See VERCEL_DEPLOY.TXT.
 
-Recommended: Cloudflare Tunnel + CrazyDomains CNAME
----------------------------------------------------
+Recommended (legacy): Cloudflare Tunnel + API hostname
+-------------------------------------------------------
 
 1. API on the Windows server:
      deploy\run_production.bat
@@ -38,22 +60,35 @@ Recommended: Cloudflare Tunnel + CrazyDomains CNAME
      Service:  http://127.0.0.1:8000
      Path:     *
 
-7. DNS at CrazyDomains (nameservers stay ns1/ns2.crazydomains.com):
-     Type:   CNAME
-     Name:   fuelapp-api
-     Target: cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
-   Do NOT use cloudflared tunnel route dns (requires Cloudflare-hosted zone).
+7. DNS — CRITICAL for outside-office / IPv4 users:
+   A plain CNAME at CrazyDomains to *.cfargotunnel.com is NOT enough. That
+   hostname resolves to an internal IPv6 address (fd10:...) with NO public IPv4.
+   Home PCs and most IPv4-only networks cannot reach the API (browser may show
+   DNS_PROBE_FINISHED_NXDOMAIN even when nslookup "works").
+
+   Recommended — proxied record in Cloudflare DNS:
+     a) Add mteinc.net to Cloudflare (site / zone).
+     b) Zero Trust -> Tunnels -> fuelapp-api -> Public Hostname (already set).
+     c) In Cloudflare DNS, create CNAME fuelapp-api -> <tunnel-id>.cfargotunnel.com
+        with Proxy status ON (orange cloud). This returns Cloudflare edge IPv4+IPv6.
+     d) Remove the CrazyDomains CNAME for fuelapp-api (avoid conflict), OR delegate
+        only that subdomain to Cloudflare per Cloudflare docs.
+
+   Office split-horizon (optional, keeps LAN fast):
+     Internal DNS ONLY: fuelapp-api.mteinc.net  A  10.10.20.40  (IIS proxy).
+     Internet users use the Cloudflare-proxied CNAME above.
 
 8. Run tunnel:
      cloudflared tunnel run fuelapp-api
+   Or legacy helper: deploy\run_api_tunnel.bat
 
 9. Test (mobile data or DNS 8.8.8.8):
      https://fuelapp-api.mteinc.net/api/health
    Expected: {"status":"ok","service":"fuel-api"}
 
-10. Server .env:
-      APP_BASE_URL=https://frontend-lovat-beta-54.vercel.app
-      CORS_ORIGINS=https://frontend-lovat-beta-54.vercel.app
+10. Server .env (Vercel cross-origin only):
+      APP_BASE_URL=https://fuel-app-two-rose.vercel.app
+      CORS_ORIGINS=https://fuel-app-two-rose.vercel.app
       SESSION_COOKIE_SECURE=true
       SESSION_COOKIE_SAMESITE=none
 
@@ -61,7 +96,7 @@ Recommended: Cloudflare Tunnel + CrazyDomains CNAME
       VITE_API_BASE_URL=https://fuelapp-api.mteinc.net
     Delete API_PROXY_URL if present. Redeploy.
 
-12. Test login: https://frontend-lovat-beta-54.vercel.app
+12. Test login: https://fuel-app-two-rose.vercel.app
 
 
 Alternative: ngrok (no custom domain)
@@ -74,13 +109,14 @@ Alternative: ngrok (no custom domain)
 LAN / on-prem (no tunnel, no Vercel)
 ------------------------------------
   deploy\run_lan.bat  ->  http://10.10.20.40:8000
+  Or IIS: https://fuelapp.mteinc.net  (see deploy\IIS_SETUP.txt)
 
 
-Checklist before Vercel login
------------------------------
+Checklist before Vercel login (legacy)
+--------------------------------------
   [ ] API running (deploy\run_production.bat)
   [ ] cloudflared tunnel run fuelapp-api
-  [ ] CrazyDomains CNAME fuelapp-api -> <tunnel-id>.cfargotunnel.com
+  [ ] CrazyDomains/Cloudflare CNAME fuelapp-api -> <tunnel-id>.cfargotunnel.com
   [ ] https://fuelapp-api.mteinc.net/api/health returns JSON
   [ ] Vercel VITE_API_BASE_URL set; API_PROXY_URL removed
   [ ] Server .env CORS + SESSION_COOKIE_SAMESITE=none
@@ -98,8 +134,27 @@ Troubleshooting
     You are still using Vercel /api rewrites. Remove them; use VITE_API_BASE_URL
     so the browser calls the API directly. See VERCEL_DEPLOY.TXT.
 
-  DNS works on Google (8.8.8.8) but office PC shows NXDOMAIN
-    Internal DNS (e.g. 10.10.20.3) lacks the CNAME. Add it there or use 8.8.8.8.
+  DNS works on Google (8.8.8.8) but office PC shows NXDOMAIN / "Failed to fetch"
+    Internal DNS (e.g. 10.10.20.3) lacks the CNAME. The frontend (fuel-app.mteinc.net)
+    may work while the API subdomain does not. Add on internal DNS:
+      Name:   fuelapp-api.mteinc.net  (or host fuelapp-api)
+      Type:   CNAME
+      Target: cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
+    Or forward all mteinc.net queries to public DNS. Quick test: use mobile data or
+    set PC DNS to 8.8.8.8, then open https://fuelapp-api.mteinc.net/api/health
+
+  nslookup works (8.8.8.8) but browser shows DNS_PROBE_FINISHED_NXDOMAIN
+    (outside office / home PC)
+    Public DNS returns only fd10:... (internal Cloudflare IPv6) — not routable
+    on the public Internet. Changing PC DNS or browser does not fix this.
+    Fix: Use a Cloudflare-proxied CNAME (orange cloud) for fuelapp-api — see
+    step 7 above. Test from mobile data: nslookup -type=A fuelapp-api.mteinc.net
+    8.8.8.8 must return a public IPv4 (e.g. 104.x), not only fd10:...
+
+  Office PC still "Failed to fetch" after internal A record works
+    Split-horizon: internal DNS A -> 10.10.20.40 + IIS (deploy\IIS_SETUP.txt).
+    Accept/trust self-signed cert once, or install a proper cert on IIS.
+    LAN fallback: deploy\run_lan.bat -> http://10.10.20.40:8000
 
   502 from https://fuelapp-api.mteinc.net
     Check Published application routes in Zero Trust; restart cloudflared;
@@ -108,6 +163,6 @@ Troubleshooting
   Login succeeds then immediately logs out
     Set SESSION_COOKIE_SAMESITE=none and SESSION_COOKIE_SECURE=true on server.
 
-See also: VERCEL_DEPLOY.TXT, DEPLOYMENT.TXT
+See also: REMOTE_ACCESS.TXT (preferred), VERCEL_DEPLOY.TXT, DEPLOYMENT.TXT
 
 ================================================================================

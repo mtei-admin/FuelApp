@@ -1,0 +1,300 @@
+================================================================================
+REMOTE ACCESS — IIS (LAN) + Cloudflare Tunnel (off-site, no VPN)
+================================================================================
+
+Goal
+----
+Keep the current office deployment and add internet access for home / mobile
+users (approvers, purchasers, broader staff) without VPN.
+
+  Office / VPN:  https://fuelapp.mteinc.net  →  internal DNS → IIS (10.10.20.40)
+  Off-site:      https://fuelapp.mteinc.net  →  Cloudflare   → tunnel → same IIS
+
+One URL, one React build, one FastAPI + SQLite. Do not put the UI on Vercel for
+production remote users. (Legacy Vercel+API tunnel: see TUNNEL_SETUP.TXT.)
+
+
+Architecture
+------------
+  Browser (office)
+      → fuelapp.mteinc.net (DNS A 10.10.20.40)
+      → IIS :443  →  frontend/dist + /api/* → 127.0.0.1:8000
+
+  Browser (internet / mobile data)
+      → fuelapp.mteinc.net (Cloudflare proxied)
+      → cloudflared on Windows Server
+      → IIS (127.0.0.1)  →  same app
+
+
+Prerequisites (already working on LAN)
+--------------------------------------
+  [ ] https://fuelapp.mteinc.net works in the office (IIS + API)
+  [ ] deploy\run_production.bat or FuelApp NSSM service running
+  [ ] frontend built with empty VITE_API_BASE_URL (IIS same-origin /api)
+  [ ] .env: APP_BASE_URL=https://fuelapp.mteinc.net
+            SESSION_COOKIE_SECURE=true
+            SESSION_COOKIE_SAMESITE=lax
+  [ ] Cloudflare account (free ok); ability to create a Tunnel
+  [ ] Public DNS: either full NS move (below) or subdomain delegation
+      — zone Status must be Active (not "Invalid nameservers")
+
+
+================================================================================
+FULL NAMESERVER MOVE — CrazyDomains → Cloudflare (mteinc.net)
+================================================================================
+
+Why
+---
+  Cloudflare shows "Invalid nameservers" until the registrar uses Cloudflare's
+  NS. A proxied tunnel hostname (orange cloud + trusted edge cert) needs an
+  Active Cloudflare zone. Domain registration can stay at CrazyDomains.ph;
+  only public DNS hosting moves.
+
+Do this BEFORE flipping nameservers
+-----------------------------------
+  1) Inventory every public record at CrazyDomains → DNS Settings.
+     Screenshot or export the full list (scroll — do not miss TXT/SPF/DKIM).
+
+  2) Known records from your zone (recreate in Cloudflare DNS exactly):
+
+     Type  Name            Content                         Proxy
+     ----  --------------  ------------------------------  -----------------
+     A     attendancehub   216.198.79.1                    DNS only (grey)
+     MX    @ (mteinc.net)  aspmx.l.google.com  (prio 1)    n/a
+     MX    @               alt1.aspmx.l.google.com (5)     n/a
+     MX    @               alt2.aspmx.l.google.com (5)     n/a
+     MX    @               alt3.aspmx.l.google.com (10)    n/a
+     MX    @               alt4.aspmx.l.google.com (10)    n/a
+
+     Also copy any TXT (SPF, DKIM, DMARC), CNAME, www, mail, etc.
+
+  3) In Cloudflare → mteinc.net → DNS → Records: ADD all of the above.
+     - attendancehub: Proxy status = DNS only (grey cloud) unless you
+       intentionally put that app behind Cloudflare.
+     - Do NOT put office-only fuelapp → 10.10.20.40 in Cloudflare public DNS.
+       Public fuelapp will be the tunnel CNAME (after tunnel is ready).
+
+  4) Optional but smart: add Google Workspace TXT/SPF if present at CrazyDomains
+     so email keeps authenticating after the cutover.
+
+  5) Cloudflare → Overview (or DNS): note the two assigned nameservers, e.g.
+       xxxx.ns.cloudflare.com
+       yyyy.ns.cloudflare.com
+
+Flip nameservers at CrazyDomains
+--------------------------------
+  1) CrazyDomains → mteinc.net → Name Servers
+  2) Change from CrazyDomains default NS to the two Cloudflare nameservers
+     (custom / external nameservers). Save.
+  3) Do not delete CrazyDomains DNS records yet — keep as backup until Active.
+
+Wait for Active
+---------------
+  Cloudflare → Domains → mteinc.net Status should change from
+  "Invalid nameservers" → "Active" (often minutes; up to 24–48 hours).
+
+  Check from any PC:
+    nslookup -type=NS mteinc.net 8.8.8.8
+  Should show the Cloudflare nameservers.
+
+Verify after Active (before tunnel)
+-----------------------------------
+  [ ] Email: send/receive a test message (Google Workspace MX)
+  [ ] https://attendancehub.mteinc.net (or whatever that host serves) still works
+  [ ] Other public hosts/TXT still resolve
+
+Then continue with tunnel steps below (STEP 1–7): create tunnel, config → IIS,
+public hostname fuelapp, proxied CNAME, keep internal DNS A → 10.10.20.40.
+
+Rollback (if something breaks)
+------------------------------
+  At CrazyDomains, set nameservers back to CrazyDomains defaults. Propagation
+  takes time; keep the old record list so you can restore.
+
+What stays where after a successful move
+----------------------------------------
+  CrazyDomains.ph     Domain registration + billing only
+  Cloudflare DNS      All public records (MX, attendancehub, fuelapp CNAME, …)
+  Office DNS          fuelapp.mteinc.net A → 10.10.20.40 (split-horizon)
+  Windows Server      IIS + API + cloudflared
+
+
+STEP 1 — Install cloudflared on the Windows Server
+--------------------------------------------------
+  Download Windows amd64 installer:
+    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+  Or use the MSI already in the repo folder if present:
+    cloudflared-windows-amd64.msi
+
+  Confirm:
+    "C:\Program Files\cloudflared\cloudflared.exe" version
+    (or Program Files (x86))
+
+
+STEP 2 — Create tunnel and login
+--------------------------------
+  As the service account / admin on the server:
+
+    cloudflared tunnel login
+    cloudflared tunnel create fuelapp
+
+  Note the Tunnel ID (UUID). Credentials land in:
+    %USERPROFILE%\.cloudflared\<TUNNEL-ID>.json
+
+
+STEP 3 — Local config (point at IIS, not uvicorn alone)
+-------------------------------------------------------
+  Copy deploy\cloudflared.config.example.yml to:
+    %USERPROFILE%\.cloudflared\config.yml
+
+  Edit tunnel ID and credentials-file path. Ingress must hit IIS so the SPA
+  and /api proxy both work:
+
+    Recommended (HTTP to IIS — avoids 502 / mobile "Host Error"):
+      hostname: fuelapp.mteinc.net
+      service: http://127.0.0.1:80
+      originRequest:
+        httpHostHeader: fuelapp.mteinc.net
+
+    IIS must have binding: http, port 80, host header fuelapp.mteinc.net
+    (already present on the FuelApp site). Browser still uses https:// via
+    Cloudflare edge cert; only the tunnel→IIS hop is HTTP on localhost.
+
+    Avoid https://127.0.0.1:443 as origin with this IIS SNI setup — TLS to
+    loopback often resets and Cloudflare shows 502 / Host Error on mobile.
+
+  Do NOT set service to http://127.0.0.1:8000 for production remote access —
+  that bypasses IIS and breaks same-origin UI+/api unless you rebuild for a
+  separate API hostname (legacy Vercel path).
+
+
+STEP 4 — Public hostname in Cloudflare Zero Trust
+--------------------------------------------------
+  Zero Trust → Networks → Tunnels → fuelapp → Published application routes:
+
+    Subdomain:  fuelapp
+    Domain:     mteinc.net
+    Path:       *
+    Type:       HTTP
+    URL:        http://127.0.0.1:80
+    Additional application settings → HTTP Host Header: fuelapp.mteinc.net
+
+
+  DNS: create/ensure CNAME fuelapp → <TUNNEL-ID>.cfargotunnel.com with
+  Proxy status ON (orange cloud). Public A lookup must return Cloudflare IPv4
+  (e.g. 104.x), not only fd10:... IPv6.
+
+
+STEP 5 — Split-horizon DNS (keep office on LAN)
+-----------------------------------------------
+  Internal DNS (e.g. 10.10.20.3) — KEEP or ADD:
+
+    fuelapp.mteinc.net   A   10.10.20.40
+
+  Office PCs using internal DNS hit IIS directly (fast, works if tunnel is down).
+
+  Internet / mobile / home DNS use Cloudflare and go through the tunnel.
+
+  Do not delete the internal A record when enabling the tunnel.
+
+
+STEP 6 — Run the tunnel
+-----------------------
+  Manual test:
+    deploy\run_remote_tunnel.bat
+
+  Or (API already running via NSSM):
+    cloudflared tunnel --config %USERPROFILE%\.cloudflared\config.yml run
+
+  Production (auto-start):
+    powershell -ExecutionPolicy Bypass -File deploy\install_cloudflared_service.ps1
+
+  Leave the existing FuelApp API service as-is.
+
+
+STEP 7 — Verify
+---------------
+  On the server:
+    [ ] http://127.0.0.1:8000/api/health
+    [ ] https://127.0.0.1/api/health  (or IIS hostname locally)
+
+  Office PC (internal DNS):
+    [ ] nslookup fuelapp.mteinc.net 10.10.20.3  →  10.10.20.40
+    [ ] https://fuelapp.mteinc.net login still works
+
+  Off-site (mobile data, no VPN):
+    [ ] deploy\check_tunnel_dns.bat  (or nslookup fuelapp.mteinc.net 8.8.8.8)
+        → public IPv4 via Cloudflare
+    [ ] https://fuelapp.mteinc.net/api/health  →  {"status":"ok",...}
+    [ ] Log in, open Approvals/Purchasing, download a PO PDF
+
+  DNS helper:
+    deploy\check_tunnel_dns.bat
+
+
+Optional hardening (recommended for A–B users)
+----------------------------------------------
+  [ ] Cloudflare Access (Zero Trust) in front of fuelapp.mteinc.net
+      — email OTP or Google; can apply to public path only (LAN bypasses if
+        clients use internal A → 10.10.20.40)
+  [ ] Strong passwords; deactivate unused accounts
+  [ ] Scheduled deploy\backup_database.ps1
+  [ ] Keep session idle (60 min) + workday end logout (already in app)
+
+
+.env (do not switch to Vercel cookie mode)
+------------------------------------------
+  APP_BASE_URL=https://fuelapp.mteinc.net
+  SESSION_COOKIE_SECURE=true
+  SESSION_COOKIE_SAMESITE=lax
+
+  Same settings for office and remote when both use the same hostname.
+  Do NOT set SESSION_COOKIE_SAMESITE=none unless the UI is on a different
+  origin (legacy Vercel).
+
+
+What stays local vs what is public
+----------------------------------
+  Always on server:  IIS, FuelApp API service, SQLite, cloudflared service
+  Public:            only HTTPS via Cloudflare to fuelapp.mteinc.net
+  Not required:      opening inbound TCP 8000 on the firewall for remote users
+
+
+Troubleshooting
+---------------
+  Office works, mobile fails DNS
+    Public CNAME not proxied (orange cloud) or still on CrazyDomains-only
+    unroutable tunnel name. Fix STEP 4 DNS; see TUNNEL_SETUP.TXT IPv4 notes.
+
+  Mobile gets 502 / "Host Error"
+    Public DNS is fine (Cloudflare IPs) but origin is failing. Change published
+    route from https://127.0.0.1:443 to http://127.0.0.1:80 with HTTP Host
+    Header fuelapp.mteinc.net. Confirm locally:
+      curl -H "Host: fuelapp.mteinc.net" http://127.0.0.1/api/health
+    Tunnel Healthy alone is not enough if the service URL is wrong.
+
+  Mobile login then immediate logout
+    Hostname mismatch or wrong cookie mode. Confirm APP_BASE_URL and that the
+    browser address bar is exactly https://fuelapp.mteinc.net (not Vercel).
+
+  Office suddenly slow / depends on internet
+    Internal DNS A for fuelapp was removed or overwritten by public CNAME.
+    Restore internal A → 10.10.20.40.
+
+  Cert warning on office only
+    Expected with self-signed IIS cert on LAN. Remote users see Cloudflare's
+    cert (trusted). Long-term: internal CA + GPO for office PCs.
+
+
+Related docs
+------------
+  deploy\IIS_SETUP.txt          — current LAN/IIS setup
+  deploy\cloudflared.config.example.yml
+  deploy\run_remote_tunnel.bat
+  deploy\install_cloudflared_service.ps1
+  deploy\check_tunnel_dns.bat
+  TUNNEL_SETUP.TXT              — legacy Vercel + fuelapp-api API-only tunnel
+  VERCEL_DEPLOY.TXT             — optional UI-only hosting (not primary remote)
+
+================================================================================

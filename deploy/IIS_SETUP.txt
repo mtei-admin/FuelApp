@@ -132,11 +132,28 @@ STEP 7 — Verify deployment
     Task Scheduler -> deploy\backup_database.ps1
 
 ================================================================================
+REMOTE ACCESS (off-site without VPN)
+================================================================================
+
+  Keep this IIS LAN deployment and add Cloudflare Tunnel for the same hostname.
+  Full checklist: REMOTE_ACCESS.TXT
+
+  Summary:
+    Office DNS: fuelapp.mteinc.net A -> 10.10.20.40 (unchanged)
+    Internet:   fuelapp.mteinc.net -> Cloudflare -> cloudflared -> IIS
+    Scripts:    deploy\run_remote_tunnel.bat
+                deploy\install_cloudflared_service.ps1
+
+================================================================================
 TROUBLESHOOTING
 ================================================================================
 
   Blank white page
     Run deploy\build_frontend.bat. Ensure frontend\dist\index.html exists.
+
+  403.14 Forbidden on https://YOUR-HOSTNAME/ (directory listing)
+    web.config SPA fallback must rewrite / to frontend/dist/index.html. Ensure URL
+    Rewrite is installed. If you still see 403, restart IIS: iisreset
 
   502 Bad Gateway on /api/*
     FastAPI is not running. Start deploy\run_production.bat or FuelApp service.
@@ -150,7 +167,47 @@ TROUBLESHOOTING
   Reset email links go to wrong URL
     Fix APP_BASE_URL in .env and restart the API service.
 
-  Certificate warning
-    Install a trusted cert from your internal CA, or distribute self-signed cert to clients.
+  500.52 URL Rewrite Module Error
+    Add HTTP_X_FORWARDED_* to server allowed variables (setup_iis.ps1), or remove
+    serverVariables/outboundRules from web.config if section is locked. Outbound
+    Accept-Encoding rule requires HTTP_ACCEPT_ENCODING in allowedServerVariables.
+
+  Login from Vercel (fuel-app.mteinc.net) still "Failed to fetch"
+    IIS uses a self-signed cert on fuelapp-api.mteinc.net. Open
+    https://fuelapp-api.mteinc.net/api/health in the browser once and accept/trust
+    the certificate, or install a trusted cert (internal CA or Let's Encrypt).
+
+  Browser shows net::ERR_NAME_NOT_RESOLVED for fuelapp-api.mteinc.net
+    This PC's DNS cannot resolve the API hostname (not CORS or cert).
+    On internal DNS (10.10.20.3) add:
+      fuelapp-api.mteinc.net  A  10.10.20.40
+      fuelapp.mteinc.net      A or CNAME (if you use that URL for the UI)
+    Set office PCs to use DNS 10.10.20.3, or run deploy\check_client_dns.bat
+    on the client. Quick test: hosts file line  10.10.20.40  fuelapp-api.mteinc.net
+
+  VPN user: NET::ERR_CERT_AUTHORITY_INVALID + HSTS (cannot proceed)
+    Cause: IIS uses a self-signed cert; the VPN laptop does not trust it. HSTS
+    (cached in Chrome) blocks "Advanced -> Proceed" after a prior visit.
+    Fix (per VPN laptop, until GPO/internal CA is deployed):
+      1. DNS: VPN must resolve fuelapp.mteinc.net -> 10.10.20.40
+         (push office DNS 10.10.20.3 over VPN, or split DNS). Run
+         deploy\check_client_dns.bat on the VPN PC.
+      2. Clear HSTS: Chrome -> chrome://net-internals/#hsts
+         -> Delete domain: fuelapp.mteinc.net
+      3. Trust cert: On server, export IIS cert (certlm.msc -> Personal ->
+         fuelapp.mteinc.net -> Export .cer). On VPN PC, install to
+         Trusted Root Certification Authorities (Local Computer).
+      4. Reopen https://fuelapp.mteinc.net
+    Permanent fix (recommended): Issue cert from internal CA (AD CS) for
+    fuelapp.mteinc.net and deploy via GPO to all domain PCs (office + VPN).
+    Do NOT enable HSTS headers until the cert is trusted on all clients.
+
+  VPN: page loads but API says "Not authenticated" after login
+    Login returns user info in JSON, but Chrome blocks the session cookie when
+    the HTTPS certificate is not fully trusted ("Not secure" in address bar).
+    The sidebar may show your name while API calls fail with 401.
+    Fix: Complete certificate trust (deploy\certs\fuelapp.mteinc.net.cer to
+    Trusted Root), clear HSTS, close all browser windows, log in again.
+    After frontend update, login will show a clear error if the cookie fails.
 
 ================================================================================

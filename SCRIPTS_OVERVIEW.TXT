@@ -1,28 +1,57 @@
-- api/routers/purchasing.py: Fuel prices, approved list, PO generation, receiving endpoints.
+- api/routers/companies.py: Company master data CRUD (/api/companies); active codes for dropdowns.
+- api/services/company_service.py: Company create/update/deactivate/reactivate with audit logging.
+- api/schemas/company.py: Company API schemas.
+- frontend/src/features/master-data/CompaniesTab.tsx: Companies master data tab.
+- frontend/src/api/companies.ts: Companies API client.
+- api/routers/encoder.py: Encoder routes — company-scoped released PO receipt and CC fill (/api/encoder/*).
+- api/services/encoder_service.py: Encoder queue counts, list, and record receipt/CC fill with company scope checks.
+- frontend/src/api/encoder.ts: Encoder API client.
+- frontend/src/hooks/useEncoderCounts.ts: Sidebar badge counts for encoder queues.
+- frontend/src/components/layout/EncodeNavGroup.tsx: Encode sidebar submenu (Released POs, CC Fills).
+- frontend/src/pages/encoder/EncoderLayout.tsx: Encode section shell with receipt/CC fill dialogs.
+- frontend/src/pages/encoder/EncoderReleasedPage.tsx: Released PO list for encoder receipt recording.
+- frontend/src/pages/encoder/EncoderCcFillsPage.tsx: Approved CC fill queue for encoders.
+- src/audit.py: Append-only audit trail helpers (log_audit, diff_snapshots, field snapshots) used by API services.
+- api/routers/audit.py: GET /api/audit — list audit log entries (accounting/superuser).
+- api/services/audit_service.py: Query wrapper for audit_log table.
+- api/schemas/audit.py: Audit log entry response schema.
+- frontend/src/api/audit.ts: Audit trail API client.
+- frontend/src/features/audit/AuditTrailPanel.tsx: Filterable audit timeline UI on Master Data.
+- api/routers/purchasing.py: Fuel prices, approved list, PO generation, PO release/undo-release, receiving endpoints.
+- api/schemas/releasing.py: PO release request schema (date, remarks).
 - api/routers/billing.py: Received items, actual quantity update, mark billed batch.
 - api/routers/reports.py: Status summary, CSV export, PDF export endpoints.
-- api/routers/dashboard.py: Analytics aggregation (usage, trends) with year/month/vendor filters.
+- api/routers/dashboard.py: Analytics aggregation (usage, trends) with year/month/vendor filters; /active-users for superuser.
+- api/services/session_service.py: Collapses user_sessions into online users (15 min online badge, device count, current IP).
+- api/schemas/session.py: Active users response schemas for Audit > Active Users.
+- src/session_policy.py: Session idle timeout, workday end expiry, and cookie max_age helpers.
+- api/core/request_utils.py: Client IP resolution (X-Forwarded-For) for session logging.
 - api/routers/documents.py: PO PDF download and billed summary PDF generation.
 - api/services/purchasing_service.py: Purchasing workflow wrapping src/database.py and PO logic.
 - api/services/billing_service.py: Billing reconciliation and mark-billed batch logic.
 - api/services/reports_service.py: Grouped report data and CSV builder.
 - api/services/dashboard_service.py: Dashboard analytics aggregation.
 - api/services/pdf_service.py: PDF generation for PO, reports, and billed summaries via src/utils/pdf_gen.py.
-- frontend/src/pages/PurchasingPage.tsx: Fuel price updates, PO generation, receiving UI.
+- api/routers/users.py: User enrollment and admin management (superuser only).
+- api/services/user_service.py: Wraps create/list/update user DB helpers with bcrypt hashing.
+- api/schemas/user_admin.py: Pydantic schemas for admin user CRUD.
+- frontend/src/features/master-data/UsersTab.tsx: Enroll and manage users (superuser / admin only).
+- frontend/src/api/users.ts: User admin API client.
 - frontend/src/pages/BillingPage.tsx: Actual quantity entry, batch mark billed, summary PDF.
 - frontend/src/pages/ReportsPage.tsx: Status summary with CSV/PDF download.
-- frontend/src/pages/DashboardPage.tsx: Usage analytics and fuel price trend charts.
+- frontend/src/pages/DashboardPage.tsx: Usage analytics, fuel price trends, and Active Users panel (superuser).
 - frontend/src/api/purchasing.ts: Purchasing API client.
 - frontend/src/api/billing.ts: Billing API client.
 - frontend/src/api/reports.ts: Reports API client.
 - frontend/src/api/dashboard.ts: Dashboard API client.
 - frontend/src/utils/download.ts: Browser blob download helper for PDF/CSV exports.
 - frontend/scripts/write-vercel-config.mjs: Generates vercel.json rewrites from API_PROXY_URL at build time.
-- frontend/.env.production: Production Vite env (VITE_API_BASE_URL for Vercel + CrazyDomains tunnel).
-- TUNNEL_SETUP.TXT: Expose on-prem API (Cloudflare Tunnel, ngrok) for Vercel API_PROXY_URL.
-- VERCEL_DEPLOY.TXT: Guide for deploying React frontend to Vercel with GitHub.
+- frontend/.env.production: Production Vite env (empty for IIS; Vercel sets VITE_API_BASE_URL in dashboard).
+- REMOTE_ACCESS.TXT: Primary off-site access — IIS (LAN) + Cloudflare Tunnel (same hostname fuelapp.mteinc.net).
+- TUNNEL_SETUP.TXT: Legacy API-only tunnel for Vercel (fuelapp-api); prefer REMOTE_ACCESS.TXT for staff.
+- VERCEL_DEPLOY.TXT: Optional React UI on Vercel (previews); not primary remote path.
 - api/routers/requisitions.py: Fuel request submit, history, edit, form context, prior-approved check.
-- api/routers/approvals.py: Pending queue, approve/reject, quantity edit, pending count badge.
+- api/routers/approvals.py: Pending queue, approve/reject/cancel approved, quantity edit, vehicle history, approved-awaiting-po list, pending count badge.
 - api/services/requisition_service.py: Requisition business logic wrapping src/database.py.
 - api/services/approval_service.py: Approval workflow and display total calculation.
 - frontend/src/pages/RequestsPage.tsx: New request form, history, one-time edit.
@@ -41,7 +70,11 @@
 - deploy/setup_api.bat: One-shot API setup (deps, DB, frontend build) with start instructions.
 - deploy/build_frontend.bat: npm install and build React app to frontend/dist for production.
 - deploy/run_production.bat: FastAPI on 127.0.0.1:8000 for IIS reverse proxy (SERVE_FRONTEND=false).
-- deploy/check_tunnel_dns.bat: Prints tunnel CNAME instructions and tests fuelapp-api.mteinc.net DNS.
+- deploy/run_remote_tunnel.bat: Cloudflare Tunnel to IIS for off-site access (see REMOTE_ACCESS.TXT).
+- deploy/install_cloudflared_service.ps1: Install cloudflared Windows service (remote path auto-start).
+- deploy/cloudflared.config.example.yml: Example tunnel ingress to IIS https://127.0.0.1:443.
+- deploy/run_api_tunnel.bat: LEGACY — API + fuelapp-api tunnel for Vercel; prefer run_remote_tunnel.bat.
+- deploy/check_tunnel_dns.bat: Tests fuelapp.mteinc.net (and legacy fuelapp-api) on public/office DNS.
 - deploy/stop_api.bat: Stops all processes listening on TCP port 8000 (production/LAN API).
 - deploy/run_lan.bat: FastAPI + React SPA on 0.0.0.0:8000 for LAN access without IIS.
 - deploy/run_streamlit.bat: Legacy Streamlit UI on 127.0.0.1:8501 (deprecated).
@@ -50,13 +83,17 @@
 - deploy/backup_database.ps1: Copies fuel_system.db to data/backups/ and retains last 30 backups.
 - deploy/iis_web.config: Legacy IIS template (superseded by web.config in project root).
 - deploy/IIS_SETUP.txt: Step-by-step IIS + HTTPS deployment guide (URL Rewrite, ARR, SSL, PWA).
+- deploy/install_iis.ps1: Install IIS Web-Server role and WebSockets only (Administrator PowerShell).
+- deploy/install_iis_rewrite_arr.ps1: Download/install URL Rewrite 2.1 + ARR 3.0; enable reverse proxy.
 - deploy/setup_iis.ps1: Administrator script to install IIS, create site, HTTPS binding, and proxy variables.
 - web.config: IIS reverse-proxy config (project root; site physical path must point here).
 - app.py: Entry point that ensures the SQLite database is initialized at startup.
+- backfill_legacy_cc.py: Tag historical CC fills (entered as PO) using serial numbers in data/legacy_cc_via_po.json.
+- seed_users.py: Upsert all users from data/seed_users.json (roles, names, emails; optional --reset-passwords).
 - init_admin.py: CLI helper to seed or update the Finance admin user.
 - src/__init__.py: Package marker for core application code.
 - src/auth.py: Authentication helpers (bcrypt hash/verify).
-- src/database.py: Initializes the SQLite database, sets WAL/foreign keys, creates users/vendors/cars/requisitions tables, and provides CRUD helpers (users/vendors/cars/requisitions lifecycle) and analytics queries (fuel usage, price trends).
+- src/database.py: Initializes the SQLite database, sets WAL/foreign keys, creates users/vendors/cars/requisitions tables, system_sequences for request/PO serial counters, and provides CRUD helpers (users/vendors/cars/requisitions lifecycle) and analytics queries (fuel usage, price trends).
 - src/modules/__init__.py: Package marker for UI modules.
 - src/modules/dashboard.py: Dashboard UI with fuel usage analytics (pie charts by vehicle/company, top 10 consuming vehicles per company, FULLTANK requests list, fuel price trend graph with vendor filter).
 - src/modules/master_data.py: Vendors and cars management UI (create/reactivate, soft delete).
@@ -67,5 +104,8 @@
 - src/modules/reports.py: Simple status-based reporting view.
 - src/modules/user_management.py: User management UI for Finance role (create/edit/deactivate users).
 - src/utils/__init__.py: Package marker for utility helpers.
+- src/utils/plate.py: Plate number validate/normalize (alphanumeric only, uppercase, uniqueness key).
 - src/utils/pdf_gen.py: Purchase order PDF rendering (jinja2 + xhtml2pdf).
-
+- frontend/src/utils/plate.ts: Client-side plate validate/normalize (match backend rules).
+- reset_serials.py: Deletes all request/PO transaction rows and sets next requisition serial + PO reference counters (default 2827 / 2787).
+- cleanup_all_transactions.py: Interactive wipe of requests, POs, fuel prices, sessions (master data kept).

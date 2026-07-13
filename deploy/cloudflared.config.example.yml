@@ -1,0 +1,16 @@
+# Example Cloudflare Tunnel config for Fuel App remote access (IIS + same origin).
+# Copy to: %USERPROFILE%\.cloudflared\config.yml
+# Replace TUNNEL-ID and paths. See REMOTE_ACCESS.TXT.
+#
+# Prefer HTTP to IIS on :80 (host header required). HTTPS to 127.0.0.1:443 often
+# fails with this IIS SNI binding and shows Cloudflare 502 / "Host Error" on mobile.
+
+tunnel: TUNNEL-ID
+credentials-file: C:\Users\administrator.MTEINC\.cloudflared\TUNNEL-ID.json
+
+ingress:
+  - hostname: fuelapp.mteinc.net
+    service: http://127.0.0.1:80
+    originRequest:
+      httpHostHeader: fuelapp.mteinc.net
+  - service: http_status:404

@@ -1,27 +1,34 @@
 @echo off
-rem DNS checklist for fuelapp-api.mteinc.net Cloudflare tunnel
+rem DNS checklist for Fuel App remote access (split-horizon + Cloudflare Tunnel)
+rem Primary hostname: fuelapp.mteinc.net (IIS LAN + tunnel remote)
+rem Legacy API-only:  fuelapp-api.mteinc.net (Vercel path — optional)
+rem See REMOTE_ACCESS.TXT
 setlocal
 echo.
-echo === Fuel App Tunnel DNS ===
+echo === Fuel App Tunnel / Split-Horizon DNS ===
 echo.
-echo Tunnel ID: cbba9bda-5122-41b9-96a6-94c2b5594683
-echo Hostname:  fuelapp-api.mteinc.net
-echo CNAME to:  cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
+echo Primary hostname: fuelapp.mteinc.net
+echo   Office:  internal A -^> 10.10.20.40  (IIS)
+echo   Remote:  Cloudflare proxied CNAME -^> tunnel -^> IIS
 echo.
-echo 1. Add this CNAME at whoever hosts mteinc.net DNS:
-echo      Name:   fuelapp-api
-echo      Target: cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
+echo --- fuelapp.mteinc.net via Public DNS (8.8.8.8) ---
+nslookup fuelapp.mteinc.net 8.8.8.8
 echo.
-echo 2. If mteinc.net is on Cloudflare, run instead:
-echo      cloudflared tunnel route dns fuelapp-api fuelapp-api.mteinc.net
+echo --- fuelapp.mteinc.net via This PC default DNS ---
+nslookup fuelapp.mteinc.net
 echo.
-echo 3. Restart tunnel after config change:
-echo      cloudflared tunnel run fuelapp-api
+echo --- fuelapp.mteinc.net via Office DNS (10.10.20.3) ---
+nslookup fuelapp.mteinc.net 10.10.20.3
 echo.
-echo 4. Test (after DNS propagates):
-echo      https://fuelapp-api.mteinc.net/api/health
+echo Expect:
+echo   Office DNS  -^> 10.10.20.40
+echo   Public DNS  -^> Cloudflare IPv4 (e.g. 104.x), not only fd10:...
 echo.
-echo Checking DNS now...
+echo --- Legacy API hostname (optional) ---
 nslookup fuelapp-api.mteinc.net 8.8.8.8
+echo.
+echo Local API:     http://127.0.0.1:8000/api/health
+echo Office app:    https://fuelapp.mteinc.net/api/health
+echo Remote app:    https://fuelapp.mteinc.net/api/health  ^(mobile data^)
 echo.
 endlocal

@@ -1,4 +1,61 @@
-2026-06-29 | Deployment | Fix Vercel build: .vercelignore src/ excluded frontend/src; use /src/ for Python backend only.
+2026-07-13 | Deployment | Remote access CONFIRMED: mobile via Cloudflare Tunnel (origin http://127.0.0.1:80); office IIS split-horizon unchanged.
+2026-07-13 | Deployment | Tunnel origin: use http://127.0.0.1:80 + Host header (not https://127.0.0.1:443) to fix mobile 502/Host Error.
+2026-07-13 | Deployment | REMOTE_ACCESS.TXT: full CrazyDomains→Cloudflare nameserver move checklist (copy MX/A first).
+2026-07-13 | Deployment | Remote access plan: IIS (LAN) + Cloudflare Tunnel (same fuelapp.mteinc.net); REMOTE_ACCESS.TXT + tunnel scripts; Vercel path marked legacy.
+2026-07-13 | Purchasing | Approved table: replace PO No. column with Requestor Details (PO auto-assigns on Generate).
+2026-07-13 | Purchasing | PO PDF: omit ***CONTAINER IS NOT ALLOWED*** when plate contains CONTAINER (both copies).
+2026-07-13 | Purchasing | Revert Update Fuel Prices button to original size/placement under header (keep fuel price board).
+2026-07-13 | Purchasing | Fuel price board: Last Updated On (latest vendor price update date) in header.
+2026-07-13 | Purchasing | Header shows current fuel prices for all vendors (Diesel/Unleaded/Premium); Update Fuel Prices still opens editors.
+2026-07-13 | Approvals | Rename pending table label Serial # → Request # (match approved section).
+2026-07-13 | Approvals | Requestor column shows requestor_name (form Requestor), not submitting account; pending list includes requestor_name.
+2026-07-13 | Reports | Reset Filters button clears plate/vendor/status/dates and reloads.
+2026-07-13 | Reports | Status single-select filter (All / Pending…Paid CC); CSV/PDF respect it; filter labels stacked evenly (To date aligned).
+2026-07-13 | Master Data | Plate numbers: allow letters, numbers, hyphen, spaces, and "&"; reject other specials; unique; uppercase on save.
+2026-07-13 | Master Data | Plate numbers: letters/digits only (reject special chars), unique by alnum identity, always uppercase on save (API, DB, React, Streamlit).
+2026-07-10 | Purchasing | PO two-up gap: DUPLICATE shifted down; cut line centered (2 spacers above, 2 below).
+2026-07-10 | Purchasing | PO PDF two-up on one letter page: top Vendors' Copy (black), bottom DUPLICATE (red), same logos/content, dashed cut line.
+2026-07-09 | UI | Page container max-width 1.5× (1100→1650px, wide 1400→2100px) across all modules; Encode layout uses .page wrapper.
+2026-07-09 | Purchasing | Fix Record Receipt Update: missing Optional import in receiving schema caused Pydantic validation error.
+2026-07-09 | Master Data | Companies tab (code + name, soft delete); seed MTEI/DSRDC/DIC/GCEIC/MTEI Trucking; vehicle/encoder dropdowns from DB (Option A text links).
+2026-07-08 | Purchasing | Record Receipt dialog: optional Remarks/Notes field (receiving_remarks); saved on receive/edit and encoder receipt.
+2026-07-08 | UI | Record CC Fill uses modal overlay (same pattern as Record Receipt); fixes inline form on CC Fills / Encode pages.
+2026-07-08 | Billing / CC | backfill_legacy_cc.py tags legacy CC fills by request #; po_generated/released revert to approved for CC Fills queue; Vendor Invoices excludes credit_card.
+2026-07-08 | Admin | Superuser Admin Edit: all workflow fields + status change on any requisition (Requests, Approvals, Purchasing, Billing).
+2026-07-08 | Roles | Rename user → encoder; encoder Encode menu (company-filtered released PO receipt + CC fills); own pending-only edit unchanged; no post-received edits for encoder.
+2026-07-07 | Purchasing | PO generation requires signatory selection dialog; stores po_signatory (PDF Approved by); workflow approved_by unchanged; mismatch warning + audit.
+2026-07-07 | Auth | Session idle logout 60 min (no API calls); absolute cap at workday end (default 18:00); IP updated each request; Active Users shows current IP only.
+2026-07-07 | Audit | Transaction Logs entity column: username, request serial, plate, vendor name (batch lookup).
+2026-07-07 | UI | Audit sidebar group: Transaction Logs (renamed from Audit Trail) + Active Users; removed audit tab from Master Data.
+2026-07-07 | UI | Active Users moved from Dashboard to sidebar (after Master Data); superuser only; route /active-users.
+2026-07-07 | Credit Card | CC payment path: settlement_type on request; CC Fills queue (no PO); paid_cc status; Billing CC Reconciliation vs card statement.
+2026-07-07 | Purchasing | Sidebar submenu: Approved (default), PO Generated, Released, Received with count badges; GET /api/purchasing/counts; nested routes /purchasing/*.
+2026-07-07 | Purchasing | PO release step: po_generated → released → received; release date/by/remarks; Released section; superuser bypass receipt + undo release.
+2026-07-06 | Purchasing | Approved, PO Generated, and Received sections: scrollable table lists (~10 rows visible), oldest first, sticky headers.
+2026-07-06 | Approvals / Purchasing | Cancel approved requests before PO: required reason (10+ chars), approver/accounting/superuser only; status cancelled; audit logged; Reports Cancelled group.
+2026-07-06 | Approvals | Vehicle request history (last 10 per vehicle): History button per row + custom Approve modal with history table; GET /api/approvals/vehicle-history/{vehicle_id}.
+2026-07-06 | Requests API | Fix Requests page load for users with edited requisitions: coerce edited_by user id to string in RequisitionResponse; include vehicle_id and fuel_type in history list query.
+2026-07-06 | Audit | Append-only audit_log for requisitions, master data (vehicles/vendors/users), fuel prices; Master Data Audit Trail tab (accounting/superuser).
+2026-07-06 | Vehicles / Requests | Renamed driver_name to Assigned To (required on vehicle); requestor auto-fills from vehicle, no login-name default.
+2026-07-04 | PDF | Fix peso symbol black box (₱→Php); Supplier/PO No. and Address/Date now same row via HTML table.
+2026-07-03 | Purchasing / Billing | Receive dialog (receipt #, dates, actual qty/price); edit until billed; billing reference mandatory; actual fields read-only in Billing.
+2026-07-03 | PDF | PO "Requested by" uses Request form requestor_name, not encoder account full name.
+2026-07-02 | Auth | Login verifies session cookie via /me; 401 clears stale user; VPN cert-trust message when cookie blocked.
+2026-07-02 | Deployment | IIS_SETUP.TXT: VPN client cert + HSTS troubleshooting (self-signed, DNS over VPN).
+2026-07-09 | Auth / Dashboard | Sidebar shows logged-in user (avatar, name, role). Superuser Dashboard: Active Users (15 min idle, collapsed devices, IP addresses). Session last_seen_at + IP on login.
+2026-07-01 | Requests | Submit Request: explicit quantity validation with error banner; styled primary button; noValidate to avoid silent HTML5 blocks.
+2026-07-01 | Requests | Quantity field accepts whole liters only; no spinner/increment controls (React + Streamlit + API validation).
+2026-07-01 | Deployment | install_service.ps1: NSSM service runs deploy\run_production.bat; auto-downloads NSSM if missing; auto-start on boot.
+2026-07-01 | Deployment | IIS login: frontend uses same-origin /api on fuelapp.mteinc.net; empty VITE_API_BASE_URL for IIS builds (Vercel sets env in dashboard).
+2026-07-01 | Deployment | Fix IIS 403.14 on /: SPA rewrite no longer skips directory root; serves frontend/dist/index.html.
+2026-07-01 | Master Data | Purchaser role can access and edit vendors/vehicles (API + React + Streamlit nav).
+2026-07-01 | Users | seed_users.py + data/seed_users.json to upsert all 11 production users.
+2026-07-01 | Master Data | Users tab (superuser only): enroll, edit, deactivate/reactivate users via /api/users.
+2026-07-01 | Database | Delete sample requests; next serial 2827, next auto PO ref 2787; system_sequences table + reset_serials.py.
+2026-07-01 | Deployment | LAN: run_lan.bat sets SESSION_COOKIE_SECURE=false for HTTP; fix Requests page stuck loading on auth failure.
+2026-07-01 | Deployment | LAN login: frontend uses same-origin /api on private IPs (10.x, 192.168.x) instead of fuelapp-api.mteinc.net.
+2026-07-01 | Deployment | LAN mode: fix / returning 404 when SERVE_FRONTEND auto; open_firewall.ps1 allows Public profile on TCP 8000.
+2026-07-01 | Deployment | Fix IIS 500.52: remove outbound Accept-Encoding rewrite; open firewall 443; split DNS A to 10.10.20.40.
 2026-06-29 | Deployment | Fix Vercel build: remove framework:vite from root vercel.json; use npm --prefix frontend so /src/main.tsx resolves.
 2026-06-29 | Deployment | Server .env: APP_BASE_URL/CORS_ORIGINS -> fuel-app-two-rose.vercel.app; push docs; redeploy fuel-app on Vercel.
 2026-06-29 | Deployment | Push master (0042e37); Vercel production live at https://fuelapp.mteinc.net with direct API bundle (fuelapp-api.mteinc.net); HANDOFF updated.

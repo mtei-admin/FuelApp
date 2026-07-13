@@ -24,6 +24,7 @@ Production deployment (Windows Server):
 - LAN access (no HTTPS): deploy\run_lan.bat
 - Windows service (auto-start): deploy\install_service.ps1 (requires NSSM)
 - IIS reverse proxy: web.config in project root (see deploy\IIS_SETUP.txt)
+- Off-site without VPN (keep LAN IIS): REMOTE_ACCESS.TXT (Cloudflare Tunnel to same hostname)
 
 Default credentials:
 - Created by init_admin.py (default username: accounting). No default password.
@@ -40,4 +41,4 @@ Project structure:
 - pwa/                  PWA manifest and service worker (optional, serve via IIS)
 - assets/               Company logos for UI and PO PDFs
 
-See also: MIGRATION.TXT, DEPLOYMENT.TXT, SMTP_SETUP.txt, SCRIPTS_OVERVIEW.TXT
+See also: MIGRATION.TXT, DEPLOYMENT.TXT, REMOTE_ACCESS.TXT, SMTP_SETUP.txt, SCRIPTS_OVERVIEW.TXT

@@ -2,6 +2,10 @@
 VERCEL DEPLOYMENT — Fuel Requisition System (React frontend)
 ================================================================================
 
+Staff remote access (home / mobile, no VPN): use REMOTE_ACCESS.TXT instead.
+  Same URL as office — https://fuelapp.mteinc.net via IIS + Cloudflare Tunnel.
+  Vercel is optional for UI previews only; not the primary remote path.
+
 Vercel hosts the React UI only. The FastAPI backend + SQLite database must run
 on your Windows server (deploy\run_production.bat or IIS). Vercel cannot run
 the Python API or local database.

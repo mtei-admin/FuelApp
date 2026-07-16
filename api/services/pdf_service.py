@@ -6,13 +6,14 @@ from src.database import fetch_requisition_by_id, list_requisitions_by_status
 from src.utils.pdf_gen import generate_billed_summary_pdf, generate_report_pdf
 
 
-def build_po_pdf_bytes(db_path: str, requisition_id: int) -> bytes:
+def build_po_pdf_bytes(db_path: str, requisition_id: int, downloader_name: str = "") -> bytes:
     """
     Generate purchase order PDF bytes for a requisition.
 
     Args:
         db_path: SQLite database path.
         requisition_id: Requisition ID.
+        downloader_name: Full name of the user downloading the PDF.
 
     Returns:
         PDF file bytes.
@@ -30,7 +31,7 @@ def build_po_pdf_bytes(db_path: str, requisition_id: int) -> bytes:
         req = {**req, **enriched}
 
     po_ref = req.get("po_reference") or ""
-    return build_po_pdf(db_path, req, po_ref)
+    return build_po_pdf(db_path, req, po_ref, downloader_name=downloader_name)
 
 
 def build_report_pdf_bytes(

@@ -37,7 +37,7 @@ export function DashboardPage() {
   }, [year, month, vendorId]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   if (loading && !data) {
@@ -90,7 +90,7 @@ export function DashboardPage() {
           </select>
         </div>
         <div className="filter-actions">
-          <button type="button" onClick={load}>
+          <button type="button" onClick={() => load()}>
             Refresh
           </button>
         </div>

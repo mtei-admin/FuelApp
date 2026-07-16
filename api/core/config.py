@@ -14,7 +14,7 @@ DB_PATH = PROJECT_ROOT / "data" / "fuel_system.db"
 FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 SESSION_COOKIE_NAME = "fuel_api_session"
-SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+# Cookie max_age is set per login from workday end (see src/session_policy.py).
 
 API_PREFIX = "/api"
 CORS_ORIGINS = os.environ.get(

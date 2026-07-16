@@ -4,7 +4,8 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, Query
 
 from api.core.dependencies import get_db_path, require_roles
-from api.services import dashboard_service
+from api.schemas.session import ActiveUsersResponse
+from api.services import dashboard_service, session_service
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -12,6 +13,18 @@ DashboardUser = Annotated[
     dict,
     Depends(require_roles("accounting", "superuser")),
 ]
+
+SuperuserOnly = Annotated[dict, Depends(require_roles("superuser"))]
+
+
+@router.get("/active-users", response_model=ActiveUsersResponse)
+def get_active_users(
+    db_path: Annotated[str, Depends(get_db_path)],
+    _user: SuperuserOnly,
+) -> ActiveUsersResponse:
+    """List collapsed active sessions for superuser dashboard oversight."""
+    data = session_service.get_collapsed_active_users(db_path)
+    return ActiveUsersResponse(**data)
 
 
 @router.get("")

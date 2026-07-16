@@ -26,15 +26,19 @@ from api.core.config import (  # noqa: E402
 )
 from api.routers import (  # noqa: E402
     approvals,
+    audit,
     auth,
     billing,
     dashboard,
     documents,
+    encoder,
     purchasing,
     reports,
     requisitions,
     vehicles,
     vendors,
+    companies,
+    users,
 )
 from src.database import init_database  # noqa: E402
 
@@ -61,10 +65,14 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(audit.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
+app.include_router(companies.router, prefix=API_PREFIX)
+app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(vehicles.router, prefix=API_PREFIX)
 app.include_router(requisitions.router, prefix=API_PREFIX)
 app.include_router(approvals.router, prefix=API_PREFIX)
+app.include_router(encoder.router, prefix=API_PREFIX)
 app.include_router(purchasing.router, prefix=API_PREFIX)
 app.include_router(billing.router, prefix=API_PREFIX)
 app.include_router(reports.router, prefix=API_PREFIX)
@@ -78,23 +86,21 @@ def health_check() -> dict:
     return {"status": "ok", "service": "fuel-api"}
 
 
-@app.get("/", include_in_schema=False)
-def api_root() -> dict:
-    """
-    Root response when SERVE_FRONTEND is off (run_production / tunnel mode).
+if not should_serve_frontend():
 
-    The React UI is served by IIS, Vercel, or run_lan.bat — not this endpoint.
-    """
-    if should_serve_frontend():
-        from fastapi import HTTPException
+    @app.get("/", include_in_schema=False)
+    def api_root() -> dict:
+        """
+        Root response when SERVE_FRONTEND is off (run_production / tunnel mode).
 
-        raise HTTPException(status_code=404, detail="Not found")
-    return {
-        "status": "ok",
-        "service": "fuel-api",
-        "health": "/api/health",
-        "hint": "API only. Use run_lan.bat for UI on this server, or Vercel/IIS for production UI.",
-    }
+        The React UI is served by IIS, Vercel, or run_lan.bat — not this endpoint.
+        """
+        return {
+            "status": "ok",
+            "service": "fuel-api",
+            "health": "/api/health",
+            "hint": "API only. Use run_lan.bat for UI on this server, or Vercel/IIS for production UI.",
+        }
 
 
 def _mount_frontend_spa() -> None:
@@ -106,6 +112,11 @@ def _mount_frontend_spa() -> None:
             StaticFiles(directory=str(assets_dir)),
             name="frontend-assets",
         )
+
+    @app.get("/", include_in_schema=False)
+    def serve_spa_root() -> FileResponse:
+        """Serve the React shell at the site root."""
+        return FileResponse(FRONTEND_DIST / "index.html")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def serve_spa(full_path: str) -> FileResponse:

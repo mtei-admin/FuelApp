@@ -2,12 +2,25 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { AuthProvider } from "./context/AuthContext";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
-import { BillingPage } from "./pages/BillingPage";
+import { BillingLayout } from "./pages/billing/BillingLayout";
+import { BillingInvoicesPage } from "./pages/billing/BillingInvoicesPage";
+import { BillingCcReconciliationPage } from "./pages/billing/BillingCcReconciliationPage";
+import { AuditLayout } from "./pages/audit/AuditLayout";
+import { TransactionLogsPage } from "./pages/audit/TransactionLogsPage";
+import { ActiveUsersPage } from "./pages/ActiveUsersPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
-import { PurchasingPage } from "./pages/PurchasingPage";
+import { PurchasingLayout } from "./pages/purchasing/PurchasingLayout";
+import { PurchasingApprovedPage } from "./pages/purchasing/PurchasingApprovedPage";
+import { PurchasingCcFillsPage } from "./pages/purchasing/PurchasingCcFillsPage";
+import { PurchasingPoGeneratedPage } from "./pages/purchasing/PurchasingPoGeneratedPage";
+import { PurchasingReleasedPage } from "./pages/purchasing/PurchasingReleasedPage";
+import { PurchasingReceivedPage } from "./pages/purchasing/PurchasingReceivedPage";
+import { EncoderLayout } from "./pages/encoder/EncoderLayout";
+import { EncoderReleasedPage } from "./pages/encoder/EncoderReleasedPage";
+import { EncoderCcFillsPage } from "./pages/encoder/EncoderCcFillsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { RequestsPage } from "./pages/RequestsPage";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
@@ -23,6 +36,18 @@ export default function App() {
             <Route element={<AppLayout />}>
               <Route path="/" element={<HomePage />} />
               <Route path="/requests" element={<RequestsPage />} />
+              <Route
+                path="/encode"
+                element={
+                  <RoleRoute allowedRoles={["encoder", "user"]}>
+                    <EncoderLayout />
+                  </RoleRoute>
+                }
+              >
+                <Route index element={<Navigate to="released" replace />} />
+                <Route path="released" element={<EncoderReleasedPage />} />
+                <Route path="cc-fills" element={<EncoderCcFillsPage />} />
+              </Route>
               <Route
                 path="/approvals"
                 element={
@@ -42,18 +67,29 @@ export default function App() {
                 path="/purchasing"
                 element={
                   <RoleRoute allowedRoles={["purchaser", "accounting", "superuser"]}>
-                    <PurchasingPage />
+                    <PurchasingLayout />
                   </RoleRoute>
                 }
-              />
+              >
+                <Route index element={<Navigate to="approved" replace />} />
+                <Route path="approved" element={<PurchasingApprovedPage />} />
+                <Route path="cc-fills" element={<PurchasingCcFillsPage />} />
+                <Route path="po-generated" element={<PurchasingPoGeneratedPage />} />
+                <Route path="released" element={<PurchasingReleasedPage />} />
+                <Route path="received" element={<PurchasingReceivedPage />} />
+              </Route>
               <Route
                 path="/billing"
                 element={
                   <RoleRoute allowedRoles={["purchaser", "accounting", "superuser"]}>
-                    <BillingPage />
+                    <BillingLayout />
                   </RoleRoute>
                 }
-              />
+              >
+                <Route index element={<Navigate to="invoices" replace />} />
+                <Route path="invoices" element={<BillingInvoicesPage />} />
+                <Route path="cc-reconciliation" element={<BillingCcReconciliationPage />} />
+              </Route>
               <Route
                 path="/reports"
                 element={
@@ -73,11 +109,31 @@ export default function App() {
               <Route
                 path="/master-data"
                 element={
-                  <RoleRoute allowedRoles={["approver", "accounting", "superuser"]}>
+                  <RoleRoute allowedRoles={["approver", "purchaser", "accounting", "superuser"]}>
                     <MasterDataPage />
                   </RoleRoute>
                 }
               />
+              <Route
+                path="/audit"
+                element={
+                  <RoleRoute allowedRoles={["accounting", "superuser"]}>
+                    <AuditLayout />
+                  </RoleRoute>
+                }
+              >
+                <Route index element={<Navigate to="transaction-logs" replace />} />
+                <Route path="transaction-logs" element={<TransactionLogsPage />} />
+                <Route
+                  path="active-users"
+                  element={
+                    <RoleRoute allowedRoles={["superuser"]}>
+                      <ActiveUsersPage />
+                    </RoleRoute>
+                  }
+                />
+              </Route>
+              <Route path="/active-users" element={<Navigate to="/audit/active-users" replace />} />
             </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

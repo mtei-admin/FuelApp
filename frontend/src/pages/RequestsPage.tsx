@@ -1,6 +1,10 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import * as requisitionsApi from "../api/requisitions";
+import * as purchasingApi from "../api/purchasing";
+import type { PurchasingRequisition } from "../api/purchasing";
 import { ApiError } from "../api/client";
+import { AdminEditDialog } from "../features/purchasing/AdminEditDialog";
+import { useAuth } from "../context/AuthContext";
 import type {
   FormVehicle,
   Requisition,
@@ -11,8 +15,41 @@ import {
   formatPeso,
   formatQuantity,
   getFuelTypeOptions,
+  parsePositiveInteger,
   unitToQuantityMode,
 } from "../utils/format";
+import type { SettlementType } from "../utils/settlement";
+import { canManageUsers } from "../utils/roles";
+
+function QuantityLitersInput({
+  value,
+  onChange,
+  id,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  id?: string;
+}) {
+  return (
+    <input
+      id={id}
+      type="text"
+      inputMode="numeric"
+      className="quantity-input"
+      value={value > 0 ? String(value) : ""}
+      onChange={(e) => onChange(parsePositiveInteger(e.target.value))}
+      placeholder="e.g. 50"
+      aria-label="Quantity in liters"
+    />
+  );
+}
+
+function validateNumericQuantity(quantity: number): string | null {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return "Enter a whole number of liters greater than 0.";
+  }
+  return null;
+}
 
 function EditRequestForm({
   req,
@@ -31,8 +68,11 @@ function EditRequestForm({
   const [quantityMode, setQuantityMode] = useState<"numeric" | "fulltank">(
     unitToQuantityMode(req.unit),
   );
-  const [quantity, setQuantity] = useState(req.quantity || 0);
+  const [quantity, setQuantity] = useState(Math.trunc(req.quantity || 0));
   const [notes, setNotes] = useState(req.notes ?? "");
+  const [settlementType, setSettlementType] = useState<SettlementType>(
+    (req.settlement_type as SettlementType) || "vendor_invoice",
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -56,6 +96,13 @@ function EditRequestForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (quantityMode === "numeric") {
+      const quantityError = validateNumericQuantity(quantity);
+      if (quantityError) {
+        setError(quantityError);
+        return;
+      }
+    }
     setSubmitting(true);
     const payload: RequisitionUpdateRequest = {
       vehicle_id: vehicleId,
@@ -64,6 +111,7 @@ function EditRequestForm({
       quantity_mode: quantityMode,
       quantity: quantityMode === "numeric" ? quantity : 0,
       notes,
+      settlement_type: settlementType,
     };
     try {
       await requisitionsApi.updateRequisition(req.id, payload);
@@ -76,7 +124,7 @@ function EditRequestForm({
   }
 
   return (
-    <form className="inline-form wide" onSubmit={handleSubmit}>
+    <form className="inline-form wide" onSubmit={handleSubmit} noValidate>
       <h3>Edit Request — {req.serial_number}</h3>
       <label>Vehicle</label>
       <select value={vehicleId} onChange={(e) => setVehicleId(Number(e.target.value))} required>
@@ -129,16 +177,28 @@ function EditRequestForm({
       {quantityMode === "numeric" && (
         <>
           <label>Quantity (liters)</label>
-          <input
-            type="number"
-            min={0.1}
-            step={1}
-            value={quantity}
-            onChange={(e) => setQuantity(Number(e.target.value))}
-            required
-          />
+          <QuantityLitersInput value={quantity} onChange={setQuantity} />
         </>
       )}
+      <fieldset className="radio-row">
+        <legend>Payment method</legend>
+        <label>
+          <input
+            type="radio"
+            checked={settlementType === "vendor_invoice"}
+            onChange={() => setSettlementType("vendor_invoice")}
+          />
+          Vendor account
+        </label>
+        <label>
+          <input
+            type="radio"
+            checked={settlementType === "credit_card"}
+            onChange={() => setSettlementType("credit_card")}
+          />
+          Credit card
+        </label>
+      </fieldset>
       <label>Notes</label>
       <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
       {error && <p className="error">{error}</p>}
@@ -155,6 +215,8 @@ function EditRequestForm({
 }
 
 export function RequestsPage() {
+  const { user } = useAuth();
+  const isSuperuser = canManageUsers(user?.role);
   const [context, setContext] = useState<RequestFormContext | null>(null);
   const [history, setHistory] = useState<Requisition[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -162,6 +224,7 @@ export function RequestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [editing, setEditing] = useState<Requisition | null>(null);
+  const [adminEditing, setAdminEditing] = useState<Requisition | null>(null);
   const [priorWarning, setPriorWarning] = useState<string | null>(null);
 
   const [vehicleId, setVehicleId] = useState<number | "">("");
@@ -171,6 +234,7 @@ export function RequestsPage() {
   const [quantity, setQuantity] = useState(0);
   const [notes, setNotes] = useState("");
   const [requestorName, setRequestorName] = useState("");
+  const [settlementType, setSettlementType] = useState<SettlementType>("vendor_invoice");
   const [submitting, setSubmitting] = useState(false);
 
   const selectedVehicle: FormVehicle | undefined = context?.vehicles.find(
@@ -190,7 +254,6 @@ export function RequestsPage() {
       ]);
       setContext(ctx);
       setHistory(rows);
-      setRequestorName((prev) => prev || ctx.default_requestor_name);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
@@ -206,6 +269,7 @@ export function RequestsPage() {
     if (!selectedVehicle) {
       setVendorId("");
       setFuelType("");
+      setRequestorName("");
       setPriorWarning(null);
       return;
     }
@@ -214,6 +278,7 @@ export function RequestsPage() {
     }
     const meta = getFuelTypeOptions(selectedVehicle.fuel_type);
     setFuelType(meta.defaultValue ?? meta.options[0] ?? "");
+    setRequestorName((selectedVehicle.assigned_to ?? "").trim());
 
     requisitionsApi
       .getPriorApproved(selectedVehicle.id)
@@ -235,6 +300,13 @@ export function RequestsPage() {
       setError("Vehicle, vendor, fuel type, and requestor are required.");
       return;
     }
+    if (quantityMode === "numeric") {
+      const quantityError = validateNumericQuantity(quantity);
+      if (quantityError) {
+        setError(quantityError);
+        return;
+      }
+    }
     if (!window.confirm("Submit this fuel request?")) {
       return;
     }
@@ -250,12 +322,15 @@ export function RequestsPage() {
         quantity: quantityMode === "numeric" ? quantity : 0,
         notes,
         requestor_name: requestorName.trim(),
+        settlement_type: settlementType,
       });
       setSuccess("Request submitted.");
       setVehicleId("");
       setVendorId("");
       setQuantity(0);
       setNotes("");
+      setRequestorName("");
+      setSettlementType("vendor_invoice");
       setQuantityMode("numeric");
       await loadData();
     } catch (err) {
@@ -265,8 +340,16 @@ export function RequestsPage() {
     }
   }
 
-  if (loading || !context) {
+  if (loading) {
     return <p className="loading">Loading requests...</p>;
+  }
+
+  if (!context) {
+    return (
+      <div className="page">
+        <p className="error banner">{error ?? "Failed to load request form."}</p>
+      </div>
+    );
   }
 
   return (
@@ -282,7 +365,7 @@ export function RequestsPage() {
       <section className="panel">
         <h2>New Request</h2>
         {priorWarning && <p className="warning banner">{priorWarning}</p>}
-        <form className="request-form" onSubmit={handleSubmit}>
+        <form className="request-form" onSubmit={handleSubmit} noValidate>
           <label>Vehicle</label>
           <select
             value={vehicleId}
@@ -351,14 +434,7 @@ export function RequestsPage() {
           {quantityMode === "numeric" && (
             <>
               <label>Quantity (liters)</label>
-              <input
-                type="number"
-                min={0.1}
-                step={1}
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-                required
-              />
+              <QuantityLitersInput value={quantity} onChange={setQuantity} />
             </>
           )}
 
@@ -369,12 +445,34 @@ export function RequestsPage() {
             required
           />
 
+          <fieldset className="radio-row">
+            <legend>Payment method</legend>
+            <label>
+              <input
+                type="radio"
+                checked={settlementType === "vendor_invoice"}
+                onChange={() => setSettlementType("vendor_invoice")}
+              />
+              Vendor account (PO / bill later)
+            </label>
+            <label>
+              <input
+                type="radio"
+                checked={settlementType === "credit_card"}
+                onChange={() => setSettlementType("credit_card")}
+              />
+              Credit card (pay at fill)
+            </label>
+          </fieldset>
+
           <label>Notes (optional)</label>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
 
-          <button type="submit" disabled={submitting}>
-            {submitting ? "Submitting..." : "Submit Request"}
-          </button>
+          <div className="form-actions">
+            <button type="submit" className="submit-request-btn" disabled={submitting}>
+              {submitting ? "Submitting..." : "Submit Request"}
+            </button>
+          </div>
         </form>
       </section>
 
@@ -416,7 +514,11 @@ export function RequestsPage() {
                       <td>{req.status}</td>
                       <td>{req.created_at?.slice(0, 10)}</td>
                       <td className="actions">
-                        {req.can_edit ? (
+                        {isSuperuser ? (
+                          <button type="button" onClick={() => setAdminEditing(req)}>
+                            Admin Edit
+                          </button>
+                        ) : req.can_edit ? (
                           <button type="button" onClick={() => setEditing(req)}>
                             Edit
                           </button>
@@ -444,6 +546,18 @@ export function RequestsPage() {
             loadData();
           }}
           onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {adminEditing && (
+        <AdminEditDialog
+          req={adminEditing as PurchasingRequisition}
+          onSave={async (payload) => {
+            await purchasingApi.adminEdit(adminEditing.id, payload);
+            setAdminEditing(null);
+            loadData();
+          }}
+          onCancel={() => setAdminEditing(null)}
         />
       )}
     </div>

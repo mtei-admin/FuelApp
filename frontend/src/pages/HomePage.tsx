@@ -33,13 +33,13 @@ export function HomePage() {
           </Link>
         )}
         {canAccessPurchasing(role) && (
-          <Link to="/purchasing" className="card-link">
+          <Link to="/purchasing/approved" className="card-link">
             <h2>Purchasing</h2>
             <p>Generate POs and receiving</p>
           </Link>
         )}
         {canAccessBilling(role) && (
-          <Link to="/billing" className="card-link">
+          <Link to="/billing/invoices" className="card-link">
             <h2>Billing</h2>
             <p>Invoice reconciliation</p>
           </Link>

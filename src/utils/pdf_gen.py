@@ -13,18 +13,36 @@ PO_TEMPLATE = Template(
         <style>
             @page {
                 size: letter;
-                margin: 0.5in;
+                margin: 0.4in;
             }
             body {
                 font-family: Arial, sans-serif;
-                font-size: 11px;
+                font-size: 10px;
                 margin: 0;
                 padding: 0;
+            }
+            .po-half {
+                width: 100%;
+            }
+            .copy-gap {
+                width: 100%;
+            }
+            .gap-spacer {
+                height: 14px;
+            }
+            .cut-divider {
+                width: 100%;
+                margin: 0;
+                padding: 2px 0;
+                border-top: 1px dashed #666;
+                text-align: center;
+                font-size: 8px;
+                color: #666;
             }
             .header-table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-bottom: 15px;
+                margin-bottom: 8px;
                 border: none;
             }
             .header-table td {
@@ -32,76 +50,78 @@ PO_TEMPLATE = Template(
                 border: none;
             }
             .header-logo-cell {
-                width: 120px;
+                width: 100px;
             }
             .header-info-cell {
                 text-align: center;
             }
             .header-right-cell {
-                width: 20%;
+                width: 22%;
                 text-align: right;
             }
             .company-logo {
-                width: 100px;
-                height: 100px;
+                width: 80px;
+                height: 80px;
                 display: block;
             }
             .company-name {
                 color: #FF0000;
-                font-size: 18px;
+                font-size: 15px;
                 font-weight: bold;
                 margin: 0 0 0.5px 0;
                 text-align: center;
             }
             .company-address {
-                font-size: 11px;
+                font-size: 9px;
                 margin: 0;
-                line-height: 0.4;
+                line-height: 0.45;
                 text-align: center;
             }
             .company-contact {
-                font-size: 10px;
+                font-size: 8px;
                 margin: -1px 0 0 0;
-                line-height: 0.4;
+                line-height: 0.45;
                 text-align: center;
             }
             .company-email {
-                font-size: 10px;
+                font-size: 8px;
                 margin: -1px 0 0 0;
-                line-height: 0.4;
+                line-height: 0.45;
                 text-align: center;
             }
             .planters-logo {
-                width: 80px;
-                height: 40px;
+                width: 70px;
+                height: 19px;
             }
-            .original-text {
+            .copy-label {
                 font-size: 10px;
-                margin-top: 5px;
+                font-weight: bold;
+                margin-top: 4px;
                 text-align: right;
+            }
+            .copy-label-vendor {
+                color: #000000;
+            }
+            .copy-label-duplicate {
+                color: #FF0000;
             }
             .po-title {
                 text-align: center;
-                font-size: 18px;
+                font-size: 15px;
                 font-weight: bold;
-                margin: 15px 0;
+                margin: 8px 0;
             }
-            .supplier-section {
-                display: table;
+            .supplier-table {
                 width: 100%;
-                margin-bottom: 15px;
+                border-collapse: collapse;
+                margin-bottom: 0;
             }
-            .supplier-left, .supplier-right {
-                display: table-cell;
+            .supplier-table td {
+                border: none;
+                padding: 1px 0;
                 vertical-align: top;
             }
-            .supplier-left {
-                width: 60%;
-            }
-            .supplier-right {
-                width: 40%;
-            }
-            .supplier-right > div {
+            .supplier-table .right {
                 text-align: right;
             }
             .supplier-label {
@@ -110,12 +130,12 @@ PO_TEMPLATE = Template(
             table {
                 width: 100%;
                 border-collapse: collapse;
-                margin-top: 10px;
-                margin-bottom: 15px;
+                margin-top: 0;
+                margin-bottom: 4px;
             }
             th, td {
                 border: 1px solid #000;
-                padding: 5px;
+                padding: 4px;
                 text-align: left;
             }
             th {
@@ -135,13 +155,13 @@ PO_TEMPLATE = Template(
             }
             .total-row {
                 text-align: right;
-                margin-bottom: 15px;
+                margin-bottom: 2px;
             }
             .footer {
-                margin-top: 20px;
+                margin-top: 2px;
             }
             .footer-row {
-                margin-bottom: 10px;
+                margin-bottom: 6px;
             }
             .footer-left, .footer-right {
                 display: inline-block;
@@ -150,12 +170,12 @@ PO_TEMPLATE = Template(
             }
             .signature-table {
                 width: 100%;
-                margin-top: 15px;
+                margin-top: 8px;
                 border-collapse: collapse;
             }
             .signature-table td {
                 vertical-align: top;
-                padding: 4px 0;
+                padding: 3px 0;
                 border: none;
             }
             .signature-left {
@@ -175,7 +195,7 @@ PO_TEMPLATE = Template(
             }
             .signature-name {
                 display: block;
-                margin-top: 4px;
+                margin-top: 3px;
                 padding-left: 5em;
             }
             .remarks {
@@ -184,109 +204,138 @@ PO_TEMPLATE = Template(
         </style>
     </head>
     <body>
-        <table class="header-table">
-            <tr>
-                <td class="header-logo-cell">
-                    {% if logo_mte_path %}
-                    <img src="{{ logo_mte_path }}" alt="MTE Logo" class="company-logo" />
-                    {% endif %}
-                </td>
-                <td class="header-info-cell">
-                    <div class="company-name">MODERN TIME ENTERPRISES, INC.</div>
-                    <div style="margin-bottom: 5px;"></div>
-                    <div class="company-address">SPK Bldg., KM 7, Lanang, Davao City, Philippines 8000</div>
-                    <div class="company-contact">Tell Nos.: (+6382) 300.9800; (+6382) 305.7267; (+6382) 300.9799; (+6382) 235.1983 – 84</div>
-                    <div class="company-email">Email: moderntime@mteinc.net</div>
-                    <div class="company-email">sales@mteinc.net</div>
-                </td>
-                <td class="header-right-cell">
-                    {% if logo_planters_path %}
-                    <img src="{{ logo_planters_path }}" alt="Planters Choice Logo" class="planters-logo" />
-                    {% endif %}
-                    <div class="original-text">ORIGINAL</div>
-                </td>
-            </tr>
-        </table>
-
-        <div class="po-title">PURCHASE ORDER</div>
-
-        <div class="supplier-section">
-            <div class="supplier-left">
-                <div><span class="supplier-label">Supplier:</span> {{ vendor_name or "" }}</div>
-                <div><span class="supplier-label">Address:</span> {{ vendor_address or "" }}</div>
-            </div>
-            <div class="supplier-right">
-                <div><span class="supplier-label">PO No.:</span> {{ po_reference or "" }} | {{ serial_number or "" }}</div>
-                <div><span class="supplier-label">Date:</span> {{ po_date or "" }}</div>
-            </div>
-        </div>
-
-        <table>
-            <thead>
+        {% macro po_copy(copy_label, copy_label_class) %}
+        <div class="po-half">
+            <table class="header-table">
                 <tr>
-                    <th class="qty-col">Qty</th>
-                    <th class="uom-col">UOM</th>
-                    <th class="desc-col">Description</th>
-                    <th class="price-col">Unit Price</th>
-                    <th class="total-col">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td class="qty-cell">{{ quantity or "" }}</td>
-                    <td class="uom-cell">{{ unit or "" }}</td>
-                    <td class="desc-cell">
-                        <strong>{{ fuel_type or "" }}</strong>
+                    <td class="header-logo-cell">
+                        {% if logo_mte_path %}
+                        <img src="{{ logo_mte_path }}" alt="Company Logo" class="company-logo" />
+                        {% endif %}
                     </td>
-                    <td class="price-cell">{{ unit_price or "₱ 0.00" }}</td>
-                    <td class="total-cell">{{ total_price or "₱ 0.00" }}</td>
-                </tr>
-                <tr>
-                    <td colspan="5" style="text-align: center;">
-                        <strong>***CONTAINER IS NOT ALLOWED***</strong>
+                    <td class="header-info-cell">
+                        <div class="company-name">{{ header_company_name or "MODERN TIME ENTERPRISES, INC." }}</div>
+                        <div class="company-address">{{ header_address or "SPK Bldg., KM 7, Lanang, Davao City, Philippines 8000" }}</div>
+                        <div class="company-contact">{{ header_contact or "" }}</div>
+                        {% if header_email %}
+                        <div class="company-email">{{ header_email }}</div>
+                        {% endif %}
+                        {% if header_email2 %}
+                        <div class="company-email">{{ header_email2 }}</div>
+                        {% endif %}
                     </td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div class="total-row">
-            <strong>TOTAL: {{ total_price or "₱ 0.00" }}</strong>
-        </div>
-
-        <div class="footer">
-            <div class="footer-row">
-                <div class="footer-left">
-                    <div class="remarks">Remarks: {{ remarks or notes or "" }}</div>
-                </div>
-            </div>
-            <table class="signature-table">
-                <tr>
-                    <td class="signature-left">
-                        <strong>Requested by:</strong><br />
-                        <span class="signature-name">{{ requested_by or "" }}</span>
-                    </td>
-                    <td class="signature-right">
-                        <div style="text-align: center;">
-                            <strong>Approved by:</strong><br />
-                            <span class="signature-name">{{ approved_by or "" }}</span>
-                        </div>
+                    <td class="header-right-cell">
+                        {% if logo_planters_path %}
+                        <img src="{{ logo_planters_path }}" alt="Secondary Logo" class="planters-logo" />
+                        {% endif %}
+                        <div class="copy-label {{ copy_label_class }}">{{ copy_label }}</div>
                     </td>
                 </tr>
             </table>
+
+            <div class="po-title">PURCHASE ORDER</div>
+
+            <table class="supplier-table">
+                <tr>
+                    <td><span class="supplier-label">Supplier:</span> {{ vendor_name or "" }}</td>
+                    <td class="right"><span class="supplier-label">PO No.:</span> {{ po_reference or "" }} | {{ serial_number or "" }}</td>
+                </tr>
+                <tr>
+                    <td><span class="supplier-label">Address:</span> {{ vendor_address or "" }}</td>
+                    <td class="right"><span class="supplier-label">Date:</span> {{ po_date or "" }}</td>
+                </tr>
+            </table>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th class="qty-col">Qty</th>
+                        <th class="uom-col">UOM</th>
+                        <th class="desc-col">Description</th>
+                        <th class="price-col">Unit Price</th>
+                        <th class="total-col">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="qty-cell">{{ quantity or "" }}</td>
+                        <td class="uom-cell">{{ unit or "" }}</td>
+                        <td class="desc-cell">
+                            <strong>{{ fuel_type or "" }}</strong>
+                        </td>
+                        <td class="price-cell">{{ unit_price or "Php 0.00" }}</td>
+                        <td class="total-cell">{{ total_price or "Php 0.00" }}</td>
+                    </tr>
+                    {% if show_container_warning %}
+                    <tr>
+                        <td colspan="5" style="text-align: center;">
+                            <strong>***CONTAINER IS NOT ALLOWED***</strong>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+
+            <div class="total-row">
+                <strong>TOTAL: {{ total_price or "Php 0.00" }}</strong>
+            </div>
+
+            <div class="footer">
+                <div class="footer-row">
+                    <div class="footer-left">
+                        <div class="remarks">Remarks: {{ remarks or notes or "" }}</div>
+                    </div>
+                </div>
+                <table class="signature-table">
+                    <tr>
+                        <td class="signature-left">
+                            <strong>Prepared by:</strong><br />
+                            <span class="signature-name">{{ prepared_by or "" }}</span>
+                        </td>
+                        <td class="signature-right">
+                            <div style="text-align: center;">
+                                <strong>Approved by:</strong><br />
+                                <span class="signature-name">{{ approved_by or "" }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
         </div>
+        {% endmacro %}
+
+        {{ po_copy("Vendors' Copy", "copy-label-vendor") }}
+        <div class="copy-gap">
+            <div class="gap-spacer"></div>
+            <div class="gap-spacer"></div>
+            <div class="cut-divider">- - - - - - - - - - Cut here - - - - - - - - - -</div>
+            <div class="gap-spacer"></div>
+            <div class="gap-spacer"></div>
+        </div>
+        {{ po_copy("DUPLICATE", "copy-label-duplicate") }}
     </body>
     </html>
     """
 )
 
 
-def render_purchase_order_html(context: Dict[str, str]) -> str:
+def plate_shows_container_warning(plate_number: str) -> bool:
+    """
+    Return True when the PO should show ***CONTAINER IS NOT ALLOWED***.
+
+    Hidden when the plate itself identifies a container asset (case-insensitive).
+    """
+    return "CONTAINER" not in (plate_number or "").upper()
+
+
+def render_purchase_order_html(context: Dict[str, Any]) -> str:
     """
     Render HTML for a purchase order using provided context data.
 
     Args:
         context: Data used to populate the purchase order template.
                  Should include logo paths and all PO details.
+                 Optional show_container_warning; if omitted, derived from plate_number.
 
     Returns:
         Rendered HTML string.
@@ -306,11 +355,16 @@ def render_purchase_order_html(context: Dict[str, str]) -> str:
                     logo_path = alt_path
                     break
         context["logo_planters_path"] = str(logo_path.resolve()) if logo_path.exists() else ""
-    
+
+    if "show_container_warning" not in context:
+        context["show_container_warning"] = plate_shows_container_warning(
+            str(context.get("plate_number") or "")
+        )
+
     return PO_TEMPLATE.render(**context)
 
 
-def generate_purchase_order_pdf(context: Dict[str, str]) -> bytes:
+def generate_purchase_order_pdf(context: Dict[str, Any]) -> bytes:
     """
     Generate a PDF for a purchase order from context data.
 
@@ -422,14 +476,14 @@ BILLED_SUMMARY_TEMPLATE = Template(
                     </td>
                     <td class="right">
                         {% if item.unit_price %}
-                            ₱{{ "%.2f"|format(item.unit_price) }}
+                            Php{{ "%.2f"|format(item.unit_price) }}
                         {% else %}
                             -
                         {% endif %}
                     </td>
                     <td class="right">
                         {% if item.total_price %}
-                            ₱{{ "%.2f"|format(item.total_price) }}
+                            Php{{ "%.2f"|format(item.total_price) }}
                         {% else %}
                             -
                         {% endif %}
@@ -439,7 +493,7 @@ BILLED_SUMMARY_TEMPLATE = Template(
             </tbody>
         </table>
         <div class="total-row">
-            GRAND TOTAL: ₱{{ "%.2f"|format(grand_total) }}
+            GRAND TOTAL: Php{{ "%.2f"|format(grand_total) }}
         </div>
     </body>
     </html>
@@ -540,7 +594,7 @@ REPORT_PDF_TEMPLATE = Template(
                 {% endfor %}
             </tbody>
         </table>
-        <div class="total-row">Grand Total: ₱{{ "%.2f"|format(grand_total) }}</div>
+        <div class="total-row">Grand Total: Php{{ "%.2f"|format(grand_total) }}</div>
     </body>
     </html>
     """
@@ -579,7 +633,7 @@ def generate_report_pdf(rows: List[Dict[str, Any]], grand_total: float = 0.0) ->
                 qty_display = r.get("quantity") or ""
                 unit_display = (r.get("unit") or "liters").strip()
             tp = r.get("total_price")
-            total_display = f"₱{float(tp):,.2f}" if tp is not None else "—"
+            total_display = f"Php{float(tp):,.2f}" if tp is not None else "—"
             raw_created = r.get("created_at") or ""
             created_at_display = raw_created[:10] if len(raw_created) >= 10 else raw_created
             normalized.append({
@@ -599,4 +653,3 @@ def generate_report_pdf(rows: List[Dict[str, Any]], grand_total: float = 0.0) ->
     if result.err:
         raise RuntimeError("Failed to generate report PDF.")
     return result.dest.getvalue()
-

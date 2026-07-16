@@ -1,34 +1,121 @@
 """Billing workflow service."""
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
+from src.audit import REQUISITION_AUDIT_FIELDS, log_field_update
 from src.database import (
+    fetch_requisition_record,
     list_requisitions_by_status,
+    list_requisitions_filtered,
+    count_requisitions_filtered,
+    mark_cc_reconciled,
     update_requisition_actual_quantity,
     update_requisition_billed,
+    SETTLEMENT_VENDOR_INVOICE,
 )
 
 
 def list_received(db_path: str) -> List[Dict[str, Any]]:
-    """List received requisitions awaiting billing."""
-    return list_requisitions_by_status(db_path, ["received"])
+    """List received vendor-invoice requisitions awaiting billing (excludes CC)."""
+    return list_requisitions_filtered(
+        db_path, ["received"], settlement_type=SETTLEMENT_VENDOR_INVOICE
+    )
+
+
+def list_cc_unreconciled(db_path: str) -> List[Dict[str, Any]]:
+    """List paid credit-card fills awaiting statement reconciliation."""
+    return list_requisitions_filtered(
+        db_path, ["paid_cc"], cc_unreconciled_only=True
+    )
+
+
+def get_billing_counts(db_path: str) -> Dict[str, int]:
+    """Return counts for billing UI badges."""
+    return {
+        "received": len(list_received(db_path)),
+        "cc_unreconciled": count_requisitions_filtered(
+            db_path, ["paid_cc"], cc_unreconciled_only=True
+        ),
+    }
+
+
+def reconcile_cc(
+    db_path: str,
+    requisition_ids: List[int],
+    statement_reference: str,
+    actor: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Mark credit card fills reconciled against a card statement."""
+    if not requisition_ids:
+        raise RuntimeError("Select at least one item to reconcile.")
+    statement_ref = statement_reference.strip()
+    if not statement_ref:
+        raise RuntimeError("Card statement reference is required.")
+
+    unreconciled = list_cc_unreconciled(db_path)
+    selected = [row for row in unreconciled if row["id"] in requisition_ids]
+    if len(selected) != len(requisition_ids):
+        raise RuntimeError("One or more selected items are no longer awaiting reconciliation.")
+
+    reconciled_by = (actor or {}).get("full_name") or (actor or {}).get("username") or ""
+    before_map = {
+        req_id: fetch_requisition_record(db_path, req_id) for req_id in requisition_ids
+    }
+    mark_cc_reconciled(db_path, requisition_ids, statement_ref, reconciled_by)
+    for req_id in requisition_ids:
+        after = fetch_requisition_record(db_path, req_id)
+        log_field_update(
+            db_path,
+            "requisition",
+            req_id,
+            "cc_reconciled",
+            actor,
+            before_map.get(req_id),
+            after,
+            [
+                "cc_statement_reference",
+                "cc_reconciled_at",
+                "cc_reconciled_by",
+            ],
+            metadata={"statement_reference": statement_ref},
+        )
+
+    return {
+        "statement_reference": statement_ref,
+        "reconciled_date": datetime.now().strftime("%Y-%m-%d"),
+        "items": selected,
+    }
 
 
 def set_actual_quantity(
     db_path: str,
     requisition_id: int,
     actual_quantity: float,
+    actor: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Update actual quantity for FULLTANK billing."""
     if actual_quantity <= 0:
         raise RuntimeError("Quantity must be greater than 0.")
+    before = fetch_requisition_record(db_path, requisition_id)
     update_requisition_actual_quantity(db_path, requisition_id, actual_quantity)
+    after = fetch_requisition_record(db_path, requisition_id)
+    log_field_update(
+        db_path,
+        "requisition",
+        requisition_id,
+        "actual_quantity_updated",
+        actor,
+        before,
+        after,
+        REQUISITION_AUDIT_FIELDS,
+    )
 
 
 def mark_billed(
     db_path: str,
     requisition_ids: List[int],
     invoice_number: str,
+    actor: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Mark selected requisitions as billed.
@@ -39,14 +126,32 @@ def mark_billed(
     if not requisition_ids:
         raise RuntimeError("Select at least one item to bill.")
 
-    received = list_requisitions_by_status(db_path, ["received"])
+    invoice_num = invoice_number.strip()
+    if not invoice_num:
+        raise RuntimeError("Vendor billing reference is required.")
+
+    received = list_requisitions_filtered(
+        db_path, ["received"], settlement_type=SETTLEMENT_VENDOR_INVOICE
+    )
     billed_items = [r for r in received if r["id"] in requisition_ids]
     if len(billed_items) != len(requisition_ids):
         raise RuntimeError("One or more selected items are no longer received.")
 
-    invoice_num = invoice_number.strip()
     for req_id in requisition_ids:
+        before = fetch_requisition_record(db_path, req_id)
         update_requisition_billed(db_path, req_id, invoice_num)
+        after = fetch_requisition_record(db_path, req_id)
+        log_field_update(
+            db_path,
+            "requisition",
+            req_id,
+            "billed",
+            actor,
+            before,
+            after,
+            REQUISITION_AUDIT_FIELDS,
+            metadata={"invoice_number": invoice_num},
+        )
 
     return {
         "invoice_number": invoice_num,

@@ -6,17 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from api.core.dependencies import get_db_path, require_roles
 from api.schemas.auth import MessageResponse
 from api.schemas.vehicle import (
-    COMPANY_OPTIONS,
     FUEL_TYPE_OPTIONS,
     VehicleCreateRequest,
     VehicleResponse,
     VehicleUpdateRequest,
 )
-from api.services import vehicle_service
+from api.services import company_service, vehicle_service
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
-MasterDataUser = Annotated[dict, Depends(require_roles("approver", "accounting", "superuser"))]
+MasterDataUser = Annotated[dict, Depends(require_roles("approver", "purchaser", "accounting", "superuser"))]
 
 
 def _handle_service_error(error: Exception) -> HTTPException:
@@ -25,9 +24,15 @@ def _handle_service_error(error: Exception) -> HTTPException:
 
 
 @router.get("/options")
-def vehicle_options(_user: MasterDataUser) -> dict:
+def vehicle_options(
+    db_path: Annotated[str, Depends(get_db_path)],
+    _user: MasterDataUser,
+) -> dict:
     """Return dropdown options for vehicle forms."""
-    return {"fuel_types": FUEL_TYPE_OPTIONS, "companies": COMPANY_OPTIONS}
+    return {
+        "fuel_types": FUEL_TYPE_OPTIONS,
+        "companies": company_service.get_active_company_codes(db_path),
+    }
 
 
 @router.get("", response_model=List[VehicleResponse])
@@ -47,7 +52,7 @@ def list_vehicles_route(
 def create_vehicle_route(
     payload: VehicleCreateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: MasterDataUser,
+    user: MasterDataUser,
 ) -> VehicleResponse:
     """Create a new vehicle (or reactivate by plate)."""
     try:
@@ -57,8 +62,9 @@ def create_vehicle_route(
             payload.model,
             payload.fuel_type,
             payload.company,
+            payload.assigned_to,
             payload.vendor_id,
-            payload.driver_name,
+            actor=user,
         )
         rows = vehicle_service.get_active_vehicles(db_path)
         match = next((row for row in rows if row["id"] == car_id), None)
@@ -74,7 +80,7 @@ def update_vehicle_route(
     vehicle_id: int,
     payload: VehicleUpdateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: MasterDataUser,
+    user: MasterDataUser,
 ) -> VehicleResponse:
     """Update an existing vehicle."""
     try:
@@ -85,8 +91,9 @@ def update_vehicle_route(
             payload.model,
             payload.fuel_type,
             payload.company,
+            payload.assigned_to,
             payload.vendor_id,
-            payload.driver_name,
+            actor=user,
         )
         rows = vehicle_service.get_active_vehicles(db_path)
         match = next((row for row in rows if row["id"] == vehicle_id), None)
@@ -101,11 +108,11 @@ def update_vehicle_route(
 def deactivate_vehicle_route(
     vehicle_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: MasterDataUser,
+    user: MasterDataUser,
 ) -> MessageResponse:
     """Soft-delete a vehicle."""
     try:
-        vehicle_service.deactivate_vehicle(db_path, vehicle_id)
+        vehicle_service.deactivate_vehicle(db_path, vehicle_id, actor=user)
         return MessageResponse(message="Vehicle deactivated")
     except RuntimeError as error:
         raise _handle_service_error(error) from error

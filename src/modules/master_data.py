@@ -14,6 +14,7 @@ from src.database import (
     upsert_car,
     upsert_vendor,
 )
+from src.utils.plate import normalize_plate_number
 
 # Path provided by app; fallback for standalone preview
 DEFAULT_DB_PATH = Path("data") / "fuel_system.db"
@@ -182,14 +183,26 @@ def render_vehicles_section(db_path: str) -> None:
             elif not company:
                 st.error("Company is required.")
             else:
-                vendor_id = vendor_options.get(vendor_name) if vendor_name != "(None)" else None
                 try:
-                    upsert_car(db_path, plate.strip(), model.strip(), vendor_id, fuel_type, company)
-                    st.session_state.show_vehicle_form = False
-                    st.success("Vehicle saved.")
-                    st.rerun()
-                except Exception as error:  # pragma: no cover - shown to user
+                    plate_normalized = normalize_plate_number(plate)
+                except ValueError as error:
                     st.error(str(error))
+                else:
+                    vendor_id = vendor_options.get(vendor_name) if vendor_name != "(None)" else None
+                    try:
+                        upsert_car(
+                            db_path,
+                            plate_normalized,
+                            model.strip(),
+                            vendor_id,
+                            fuel_type,
+                            company,
+                        )
+                        st.session_state.show_vehicle_form = False
+                        st.success("Vehicle saved.")
+                        st.rerun()
+                    except Exception as error:  # pragma: no cover - shown to user
+                        st.error(str(error))
     
     st.divider()
     vehicles = safe_list_vehicles(db_path)
@@ -376,14 +389,27 @@ def render_edit_vehicle_form(db_path: str, vehicle: dict) -> None:
         elif not company:
             st.error("Company is required.")
         else:
-            vendor_id = vendor_options.get(vendor_name) if vendor_name != "(None)" else None
             try:
-                update_car(db_path, vehicle["id"], plate.strip(), model.strip(), vendor_id, fuel_type, company)
-                st.session_state[f"editing_vehicle_{vehicle['id']}"] = False
-                st.success("Vehicle updated successfully.")
-                st.rerun()
-            except Exception as error:  # pragma: no cover - shown to user
+                plate_normalized = normalize_plate_number(plate)
+            except ValueError as error:
                 st.error(str(error))
+            else:
+                vendor_id = vendor_options.get(vendor_name) if vendor_name != "(None)" else None
+                try:
+                    update_car(
+                        db_path,
+                        vehicle["id"],
+                        plate_normalized,
+                        model.strip(),
+                        vendor_id,
+                        fuel_type,
+                        company,
+                    )
+                    st.session_state[f"editing_vehicle_{vehicle['id']}"] = False
+                    st.success("Vehicle updated successfully.")
+                    st.rerun()
+                except Exception as error:  # pragma: no cover - shown to user
+                    st.error(str(error))
 
 
 def safe_list_vehicles(db_path: str) -> List[dict]:

@@ -3,57 +3,10 @@
 Keeps master data (users, vendors, vehicles) intact.
 """
 from pathlib import Path
-import sqlite3
 
+from src.database import delete_all_transactions, init_database
 
 DB_PATH = Path("data") / "fuel_system.db"
-
-
-def get_connection(db_path: str) -> sqlite3.Connection:
-    """Get a SQLite connection with WAL and foreign keys enabled."""
-    connection = sqlite3.connect(db_path)
-    connection.execute("PRAGMA journal_mode=WAL;")
-    connection.execute("PRAGMA foreign_keys=ON;")
-    return connection
-
-
-def delete_all_transactions(db_path: str) -> None:
-    """
-    Delete all transactional data while leaving master data untouched.
-
-    Tables affected:
-    - requisitions
-    - vendor_fuel_prices
-    - password_reset_tokens
-    - user_sessions
-    """
-    try:
-        with get_connection(db_path) as connection:
-            # Wrap in a single transaction
-            connection.execute("BEGIN;")
-
-            # Delete all requisitions (requests, POs, billing history)
-            connection.execute("DELETE FROM requisitions;")
-
-            # Delete all vendor fuel prices
-            connection.execute("DELETE FROM vendor_fuel_prices;")
-
-            # Optional but recommended: clear password reset tokens
-            try:
-                connection.execute("DELETE FROM password_reset_tokens;")
-            except sqlite3.OperationalError:
-                # Table may not exist in very old DBs
-                pass
-
-            # Optional: clear all user sessions (forces fresh login)
-            try:
-                connection.execute("DELETE FROM user_sessions;")
-            except sqlite3.OperationalError:
-                pass
-
-            connection.commit()
-    except sqlite3.Error as error:
-        raise RuntimeError(f"Failed to delete transactional data: {error}") from error
 
 
 def main() -> None:
@@ -72,9 +25,10 @@ def main() -> None:
         print("Operation cancelled.")
         return
 
+    init_database(db_path_str)
     delete_all_transactions(db_path_str)
     print("All transactional data deleted successfully.")
-    print("Next new requisition will start serial_number from 00001 again (based on app logic).")
+    print("To set next serial numbers, run: python reset_serials.py")
 
 
 if __name__ == "__main__":

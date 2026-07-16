@@ -20,6 +20,42 @@ from src.database import (
 
 DEFAULT_DB_PATH = Path("data") / "fuel_system.db"
 
+_REQUEST_QUANTITY_CSS = """
+<style>
+    [data-testid="stForm"] [data-testid="stNumberInput"] button {
+        display: none !important;
+    }
+    [data-testid="stForm"] [data-testid="stNumberInput"] input {
+        padding-right: 0.5rem !important;
+    }
+</style>
+"""
+
+
+def _apply_request_quantity_field_style() -> None:
+    """Hide +/- steppers on request quantity fields; liters are typed as integers."""
+    st.markdown(_REQUEST_QUANTITY_CSS, unsafe_allow_html=True)
+
+
+def _normalize_numeric_quantity(quantity: float) -> float:
+    """
+    Ensure numeric quantity is a positive whole number of liters.
+
+    Args:
+        quantity: Raw quantity from the form.
+
+    Returns:
+        Quantity as float whole liters for database storage.
+
+    Raises:
+        ValueError: If quantity is not a positive integer.
+    """
+    if quantity <= 0:
+        raise ValueError("Positive quantity is required for numeric mode.")
+    if quantity != int(quantity):
+        raise ValueError("Quantity must be a whole number of liters.")
+    return float(int(quantity))
+
 
 def get_company_logo_paths(company: Optional[str]) -> List[Optional[str]]:
     """
@@ -362,6 +398,7 @@ def render_request_form(
     )
 
     with st.form("request_form", clear_on_submit=True):
+        _apply_request_quantity_field_style()
         qty_mode = st.radio(
             "Quantity Type",
             options=["Numeric", "FULLTANK"],
@@ -375,10 +412,11 @@ def render_request_form(
         if qty_mode == "Numeric":
             quantity = st.number_input(
                 "Quantity (liters)",
-                min_value=0.0,
-                step=1.0,
+                min_value=1,
+                step=1,
+                format="%d",
                 key="req_quantity",
-                help="Press Tab or Enter to move to next field.",
+                help="Whole liters only (integers).",
             )
         else:
             st.session_state["req_quantity"] = 0.0
@@ -417,8 +455,10 @@ def render_request_form(
             return
         
         if qty_mode == "Numeric":
-            if quantity is None or quantity <= 0:
-                st.error("Positive quantity is required for numeric mode.")
+            try:
+                quantity = _normalize_numeric_quantity(float(quantity))
+            except ValueError as error:
+                st.error(str(error))
                 return
         else:
             quantity = 0.0
@@ -700,6 +740,7 @@ def render_edit_form(
             edit_fuel_type_index = 0  # Default to first option
     
     with st.form(f"edit_form_{requisition_id}", clear_on_submit=False):
+        _apply_request_quantity_field_style()
         vehicle_choice = st.selectbox(
             "Vehicle",
             vehicle_options,
@@ -733,13 +774,15 @@ def render_edit_form(
         )
         quantity = 0.0
         if qty_mode == "Numeric":
+            stored_qty = int(full_req.get("quantity", 0) or 0)
             quantity = st.number_input(
                 "Quantity (liters)",
-                min_value=0.0,
-                step=1.0,
-                value=float(full_req.get("quantity", 0)),
+                min_value=1,
+                step=1,
+                value=max(1, stored_qty),
+                format="%d",
                 key=f"edit_quantity_{requisition_id}",
-                help="Press Tab or Enter to move to next field.",
+                help="Whole liters only (integers).",
             )
         st.text_input(
             "Requestor",
@@ -771,8 +814,10 @@ def render_edit_form(
             st.error("Vehicle and vendor are required.")
             return
         if qty_mode == "Numeric":
-            if quantity is None or quantity <= 0:
-                st.error("Positive quantity is required for numeric mode.")
+            try:
+                quantity = _normalize_numeric_quantity(float(quantity))
+            except ValueError as error:
+                st.error(str(error))
                 return
         else:
             quantity = 0.0

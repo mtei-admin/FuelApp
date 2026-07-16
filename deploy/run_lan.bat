@@ -16,6 +16,8 @@ if not exist "frontend\dist\index.html" (
 echo [INFO] Serving on http://0.0.0.0:8000 — ensure Windows Firewall allows inbound TCP 8000.
 ".venv\Scripts\python.exe" -m pip install -q -r api\requirements.txt
 set SERVE_FRONTEND=true
+set SESSION_COOKIE_SECURE=false
+set SESSION_COOKIE_SAMESITE=lax
 ".venv\Scripts\python.exe" -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 
 endlocal

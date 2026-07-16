@@ -10,7 +10,7 @@ from api.services import vendor_service
 
 router = APIRouter(prefix="/vendors", tags=["vendors"])
 
-MasterDataUser = Annotated[dict, Depends(require_roles("approver", "accounting", "superuser"))]
+MasterDataUser = Annotated[dict, Depends(require_roles("approver", "purchaser", "accounting", "superuser"))]
 
 
 def _handle_service_error(error: Exception) -> HTTPException:
@@ -35,11 +35,11 @@ def list_vendors_route(
 def create_vendor_route(
     payload: VendorCreateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: MasterDataUser,
+    user: MasterDataUser,
 ) -> VendorResponse:
     """Create a new vendor (or reactivate by name)."""
     try:
-        vendor_id = vendor_service.create_vendor(db_path, payload.name, payload.address)
+        vendor_id = vendor_service.create_vendor(db_path, payload.name, payload.address, actor=user)
         rows = vendor_service.get_active_vendors(db_path)
         match = next((row for row in rows if row["id"] == vendor_id), None)
         if not match:
@@ -54,11 +54,11 @@ def update_vendor_route(
     vendor_id: int,
     payload: VendorUpdateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: MasterDataUser,
+    user: MasterDataUser,
 ) -> VendorResponse:
     """Update an existing vendor."""
     try:
-        vendor_service.save_vendor(db_path, vendor_id, payload.name, payload.address)
+        vendor_service.save_vendor(db_path, vendor_id, payload.name, payload.address, actor=user)
         rows = vendor_service.get_active_vendors(db_path)
         match = next((row for row in rows if row["id"] == vendor_id), None)
         if not match:
@@ -72,11 +72,11 @@ def update_vendor_route(
 def deactivate_vendor_route(
     vendor_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: MasterDataUser,
+    user: MasterDataUser,
 ) -> MessageResponse:
     """Soft-delete a vendor."""
     try:
-        vendor_service.deactivate_vendor(db_path, vendor_id)
+        vendor_service.deactivate_vendor(db_path, vendor_id, actor=user)
         return MessageResponse(message="Vendor deactivated")
     except RuntimeError as error:
         raise _handle_service_error(error) from error

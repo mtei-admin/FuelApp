@@ -37,7 +37,7 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
     vendors_from_master = _safe_list_vendors(path)
     vendor_names = sorted([v.get("name") or "" for v in vendors_from_master if v.get("name")])
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         plate_filter = st.text_input(
             "Plate number",
@@ -61,13 +61,31 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
         else:
             st.caption("No vendors in Master Data.")
     with col3:
+        status_options = [
+            "(All statuses)",
+            "Pending",
+            "Approved",
+            "PO Generated",
+            "Released",
+            "Received",
+            "Billed",
+            "Cancelled",
+            "Paid (CC)",
+        ]
+        status_selected = st.selectbox(
+            "Status",
+            options=status_options,
+            key="reports_status_select",
+            help="Filter to one status group or show all.",
+        )
+    with col4:
         from_date = st.date_input(
             "From date",
             value=None,
             key="reports_from_date",
             help="Optional. Filter by request created date (start of day).",
         )
-    with col4:
+    with col5:
         to_date = st.date_input(
             "To date",
             value=None,
@@ -79,9 +97,14 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
         "Pending": ["pending"],
         "Approved": ["approved"],
         "PO Generated": ["po_generated"],
+        "Released": ["released"],
         "Received": ["received"],
         "Billed": ["billed"],
+        "Cancelled": ["cancelled"],
+        "Paid (CC)": ["paid_cc"],
     }
+    if status_selected and status_selected != "(All statuses)":
+        status_groups = {status_selected: status_groups[status_selected]}
 
     all_filtered_rows: List[Dict] = []
     total_cost = 0.0

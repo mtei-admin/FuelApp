@@ -1,0 +1,73 @@
+[
+  {
+    "username": "wayne",
+    "role": "encoder",
+    "full_name": "WAYNE TE",
+    "email": "w.te@moderntime.ph",
+    "company": "MTEI"
+  },
+  {
+    "username": "admin",
+    "role": "superuser",
+    "full_name": "Admin",
+    "email": "admin@moderntime.ph"
+  },
+  {
+    "username": "jayson",
+    "role": "encoder",
+    "full_name": "JAYSON LORENO",
+    "email": "j.loreno@moderntime.ph",
+    "company": "MTEI"
+  },
+  {
+    "username": "ramil",
+    "role": "encoder",
+    "full_name": "RAMIL DECIERDO",
+    "email": "ramil@moderntime.ph",
+    "company": "MTEI"
+  },
+  {
+    "username": "jean",
+    "role": "purchaser",
+    "full_name": "JEAN CABANDI",
+    "email": "mtei.jean@gmail.com"
+  },
+  {
+    "username": "Administrator",
+    "role": "superuser",
+    "full_name": "IT - ADMIN",
+    "email": "admin@mteinc.net"
+  },
+  {
+    "username": "myra",
+    "role": "accounting",
+    "full_name": "MYRALEN SALON",
+    "email": "m.salon@moderntime.ph"
+  },
+  {
+    "username": "mike",
+    "role": "encoder",
+    "full_name": "MICHAEL GUABLAS",
+    "email": null,
+    "company": "MTEI"
+  },
+  {
+    "username": "duke",
+    "role": "encoder",
+    "full_name": "DUKE SAGAL",
+    "email": "d.sagal@moderntime.ph",
+    "company": "MTEI"
+  },
+  {
+    "username": "jidc",
+    "role": "approver",
+    "full_name": "JOHN IRENE DEL CAMPO",
+    "email": "j.delcampo@dominicandsons.ph"
+  },
+  {
+    "username": "bruce",
+    "role": "approver",
+    "full_name": "BRUCE BAGASBAS",
+    "email": null
+  }
+]

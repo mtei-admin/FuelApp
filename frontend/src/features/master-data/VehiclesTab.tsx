@@ -4,11 +4,11 @@ import * as vehicleApi from "../../api/vehicles";
 import { ApiError } from "../../api/client";
 import type { Vendor } from "../../types/vendor";
 import type {
-  CompanyName,
   FuelType,
   Vehicle,
   VehicleOptions,
 } from "../../types/vehicle";
+import { normalizePlateNumber } from "../../utils/plate";
 
 interface VehicleFormProps {
   initial?: Vehicle;
@@ -30,25 +30,38 @@ function VehicleForm({
   const [fuelType, setFuelType] = useState<FuelType>(
     (initial?.fuel_type as FuelType) ?? options.fuel_types[0],
   );
-  const [company, setCompany] = useState<CompanyName>(
-    (initial?.company as CompanyName) ?? options.companies[0],
+  const companyChoices = [...options.companies];
+  if (initial?.company && !companyChoices.includes(initial.company)) {
+    companyChoices.unshift(initial.company);
+  }
+  const [company, setCompany] = useState(
+    initial?.company ?? options.companies[0] ?? "",
   );
   const [vendorId, setVendorId] = useState<string>(
     initial?.vendor_id ? String(initial.vendor_id) : "",
   );
+  const [assignedTo, setAssignedTo] = useState(initial?.assigned_to ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    let plateNormalized: string;
+    try {
+      plateNormalized = normalizePlateNumber(plateNumber);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid plate number");
+      return;
+    }
     setSubmitting(true);
     const payload = {
-      plate_number: plateNumber.trim(),
+      plate_number: plateNormalized,
       model: model.trim(),
       fuel_type: fuelType,
       company,
       vendor_id: vendorId ? Number(vendorId) : null,
+      assigned_to: assignedTo.trim(),
     };
     try {
       if (initial) {
@@ -71,10 +84,15 @@ function VehicleForm({
       <input
         id="vehicle-plate"
         value={plateNumber}
-        onChange={(e) => setPlateNumber(e.target.value)}
+        onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+        onBlur={() => setPlateNumber((v) => v.trim().toUpperCase())}
+        autoCapitalize="characters"
+        spellCheck={false}
         required
       />
-      <label htmlFor="vehicle-model">Make / Model</label>
+      <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+        Letters, numbers, hyphen, spaces, and "&" only. Saved in uppercase.
+      </p>      <label htmlFor="vehicle-model">Make / Model</label>
       <input
         id="vehicle-model"
         value={model}
@@ -98,10 +116,10 @@ function VehicleForm({
       <select
         id="vehicle-company"
         value={company}
-        onChange={(e) => setCompany(e.target.value as CompanyName)}
+        onChange={(e) => setCompany(e.target.value)}
         required
       >
-        {options.companies.map((c) => (
+        {companyChoices.map((c) => (
           <option key={c} value={c}>
             {c}
           </option>
@@ -120,6 +138,13 @@ function VehicleForm({
           </option>
         ))}
       </select>
+      <label htmlFor="vehicle-assigned">Assigned To</label>
+      <input
+        id="vehicle-assigned"
+        value={assignedTo}
+        onChange={(e) => setAssignedTo(e.target.value)}
+        required
+      />
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
         <button type="submit" disabled={submitting}>
@@ -225,6 +250,7 @@ export function VehiclesTab() {
               <th>Make / Model</th>
               <th>Company</th>
               <th>Fuel</th>
+              <th>Assigned To</th>
               <th>Default Vendor</th>
               <th>Actions</th>
             </tr>
@@ -236,6 +262,7 @@ export function VehiclesTab() {
                 <td>{vehicle.model}</td>
                 <td>{vehicle.company || "—"}</td>
                 <td>{vehicle.fuel_type || "—"}</td>
+                <td>{vehicle.assigned_to || "—"}</td>
                 <td>{vehicle.vendor_name || "—"}</td>
                 <td className="actions">
                   <button type="button" onClick={() => setEditing(vehicle)}>

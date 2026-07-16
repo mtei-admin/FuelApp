@@ -1,17 +1,18 @@
 """Authentication routes: login, logout, current user."""
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 
 from api.core.config import (
     SESSION_COOKIE_NAME,
-    SESSION_MAX_AGE_SECONDS,
     get_session_cookie_samesite,
     get_session_cookie_secure,
 )
 from api.core.dependencies import get_current_user, get_db_path
+from api.core.request_utils import get_client_ip
 from api.schemas.auth import LoginRequest, MessageResponse, UserResponse
 from api.services.auth_service import authenticate_user, logout_user
+from src.session_policy import seconds_until_timestamp, workday_session_expires_at
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def login(
     payload: LoginRequest,
     response: Response,
+    request: Request,
     db_path: Annotated[str, Depends(get_db_path)],
 ) -> UserResponse:
     """
@@ -36,7 +38,12 @@ def login(
     Raises:
         HTTPException: If credentials are invalid.
     """
-    user, token, error = authenticate_user(db_path, payload.username, payload.password)
+    user, token, error = authenticate_user(
+        db_path,
+        payload.username,
+        payload.password,
+        ip_address=get_client_ip(request),
+    )
     if error or not user or not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -52,7 +59,7 @@ def login(
         key=SESSION_COOKIE_NAME,
         value=token,
         httponly=True,
-        max_age=SESSION_MAX_AGE_SECONDS,
+        max_age=seconds_until_timestamp(workday_session_expires_at()),
         samesite=cookie_samesite,
         secure=cookie_secure,
         path="/",

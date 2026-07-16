@@ -1,10 +1,15 @@
 """FastAPI dependencies for database access and authentication."""
 from typing import Annotated, Any, Dict, Optional
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 
 from api.core.config import DB_PATH, SESSION_COOKIE_NAME
-from src.database import fetch_user_by_id, get_user_id_from_session
+from api.core.request_utils import get_client_ip
+from src.database import (
+    fetch_user_by_id,
+    get_user_id_from_session,
+    touch_user_session,
+)
 
 
 def get_db_path() -> str:
@@ -13,6 +18,7 @@ def get_db_path() -> str:
 
 
 def get_current_user_optional(
+    request: Request,
     db_path: Annotated[str, Depends(get_db_path)],
     session_token: Annotated[Optional[str], Cookie(alias=SESSION_COOKIE_NAME)] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -20,6 +26,7 @@ def get_current_user_optional(
     Return the authenticated user if a valid session cookie is present.
 
     Args:
+        request: Incoming HTTP request (for client IP on activity touch).
         db_path: SQLite database path.
         session_token: Raw session token from httpOnly cookie.
 
@@ -32,6 +39,8 @@ def get_current_user_optional(
     user_id = get_user_id_from_session(db_path, session_token)
     if not user_id:
         return None
+
+    touch_user_session(db_path, session_token, ip_address=get_client_ip(request))
 
     user = fetch_user_by_id(db_path, user_id)
     if not user or not user.get("is_active"):
@@ -90,5 +99,6 @@ def _public_user(user: Dict[str, Any]) -> Dict[str, Any]:
         "role": user["role"],
         "full_name": user.get("full_name"),
         "email": user.get("email"),
+        "company": user.get("company"),
         "is_active": bool(user.get("is_active")),
     }

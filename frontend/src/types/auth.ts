@@ -4,6 +4,7 @@ export interface User {
   role: string;
   full_name?: string | null;
   email?: string | null;
+  company?: string | null;
   is_active: boolean;
 }
 

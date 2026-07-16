@@ -23,16 +23,17 @@ export interface Requisition {
   vendor_name?: string | null;
   can_edit: boolean;
   edit_error?: string | null;
+  settlement_type?: string;
 }
 
 export interface PendingRequisition extends Requisition {
   requester_name?: string | null;
   display_total?: number | null;
   can_approve: boolean;
+  approved_by?: string | null;
 }
 
 export interface RequestFormContext {
-  default_requestor_name: string;
   vehicles: FormVehicle[];
   vendors: FormVendor[];
 }
@@ -45,6 +46,7 @@ export interface FormVehicle {
   vendor_name?: string | null;
   fuel_type?: string | null;
   company?: string | null;
+  assigned_to?: string | null;
 }
 
 export interface FormVendor {
@@ -61,7 +63,10 @@ export interface RequisitionCreateRequest {
   quantity: number;
   notes?: string;
   requestor_name: string;
+  settlement_type?: SettlementType;
 }
+
+export type SettlementType = "vendor_invoice" | "credit_card";
 
 export interface RequisitionUpdateRequest {
   vehicle_id: number;
@@ -70,6 +75,7 @@ export interface RequisitionUpdateRequest {
   quantity_mode: QuantityMode;
   quantity: number;
   notes?: string;
+  settlement_type?: SettlementType;
 }
 
 export interface ApprovalQuantityUpdateRequest {
@@ -81,4 +87,23 @@ export interface ApprovalQuantityUpdateRequest {
 export interface PriorApproved {
   vehicle_id: number;
   requests: Array<Record<string, unknown>>;
+}
+
+export interface VehicleHistoryItem {
+  id: number;
+  serial_number?: string | null;
+  quantity: number;
+  unit: string;
+  status: string;
+  fuel_type?: string | null;
+  total_price?: number | null;
+  created_at?: string | null;
+  requestor_name?: string | null;
+  vendor_name?: string | null;
+}
+
+export interface VehicleHistoryResponse {
+  vehicle_id: number;
+  limit: number;
+  requests: VehicleHistoryItem[];
 }

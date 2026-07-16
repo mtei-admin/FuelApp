@@ -1,5 +1,23 @@
 import { apiFetch } from "./client";
 
+export interface ActiveUserRow {
+  user_id: number;
+  username: string;
+  full_name?: string | null;
+  role: string;
+  device_count: number;
+  is_online: boolean;
+  login_at: string;
+  last_seen_at: string;
+  ip_address?: string;
+}
+
+export interface ActiveUsersData {
+  idle_minutes: number;
+  online_count: number;
+  users: ActiveUserRow[];
+}
+
 export interface DashboardData {
   year: number;
   month: number;
@@ -25,4 +43,8 @@ export async function getDashboard(
     params.set("vendor_id", String(vendorId));
   }
   return apiFetch<DashboardData>(`/api/dashboard?${params.toString()}`);
+}
+
+export async function getActiveUsers(): Promise<ActiveUsersData> {
+  return apiFetch<ActiveUsersData>("/api/dashboard/active-users");
 }

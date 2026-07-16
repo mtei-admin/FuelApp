@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import * as authApi from "../api/auth";
-import { ApiError } from "../api/client";
+import { ApiError, setUnauthorizedHandler } from "../api/client";
 import type { User } from "../types/auth";
 
 interface AuthContextValue {
@@ -42,9 +42,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshUser().finally(() => setLoading(false));
   }, [refreshUser]);
 
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   const login = useCallback(async (username: string, password: string) => {
-    const loggedIn = await authApi.login({ username, password });
-    setUser(loggedIn);
+    await authApi.login({ username, password });
+    try {
+      const loggedIn = await authApi.getCurrentUser();
+      setUser(loggedIn);
+    } catch (error) {
+      setUser(null);
+      if (error instanceof ApiError && error.status === 401) {
+        throw new ApiError(
+          401,
+          "Login succeeded but your browser did not save the session cookie. " +
+            "Install/trust the site certificate (see deploy/certs), clear HSTS, then sign in again.",
+        );
+      }
+      throw error;
+    }
   }, []);
 
   const logout = useCallback(async () => {

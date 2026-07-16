@@ -13,6 +13,7 @@ def authenticate_user(
     db_path: str,
     username: str,
     password: str,
+    ip_address: Optional[str] = None,
 ) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
     """
     Validate credentials and create a session token.
@@ -34,13 +35,14 @@ def authenticate_user(
     if not verify_password(password, hashed_password):
         return None, None, "Invalid credentials or inactive account."
 
-    token = create_user_session(db_path, user["id"])
+    token = create_user_session(db_path, user["id"], ip_address=ip_address)
     public_user = {
         "id": user["id"],
         "username": user["username"],
         "role": user["role"],
         "full_name": user.get("full_name"),
         "email": user.get("email"),
+        "company": user.get("company"),
         "is_active": bool(user.get("is_active")),
     }
     return public_user, token, None

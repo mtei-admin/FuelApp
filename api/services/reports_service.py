@@ -4,15 +4,37 @@ import io
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from src.database import list_requisitions_by_status, list_vendors
+from src.database import list_requisitions_by_status, list_vendors, LEGACY_CC_VIA_PO_NOTE, SETTLEMENT_CREDIT_CARD, normalize_settlement_type
 
 STATUS_GROUPS = {
     "Pending": ["pending"],
     "Approved": ["approved"],
     "PO Generated": ["po_generated"],
+    "Released": ["released"],
     "Received": ["received"],
     "Billed": ["billed"],
+    "Cancelled": ["cancelled"],
+    "Paid (CC)": ["paid_cc"],
 }
+
+
+def _payment_label(row: Dict[str, Any]) -> str:
+    """Human-readable payment path for exports (includes legacy CC via PO)."""
+    settlement = normalize_settlement_type(row.get("settlement_type"))
+    status = (row.get("status") or "").lower()
+    notes = row.get("notes") or ""
+    if settlement == SETTLEMENT_CREDIT_CARD:
+        if status == "paid_cc":
+            return "credit_card"
+        if LEGACY_CC_VIA_PO_NOTE in notes or status in {
+            "approved",
+            "po_generated",
+            "released",
+            "received",
+            "billed",
+        }:
+            return "credit_card (legacy PO)"
+    return settlement
 
 
 def _filter_by_date_range(
@@ -46,15 +68,37 @@ def build_report(
     vendor_filter: str = "",
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
+    status_filter: str = "",
 ) -> Dict[str, Any]:
-    """Build grouped report summary and flat rows for export."""
+    """
+    Build grouped report summary and flat rows for export.
+
+    Args:
+        db_path: SQLite database path.
+        plate_filter: Optional partial plate match (case-insensitive).
+        vendor_filter: Optional exact vendor name.
+        from_date: Optional inclusive created_at start.
+        to_date: Optional inclusive created_at end.
+        status_filter: Optional status group label (e.g. "Received").
+            Empty means all status groups.
+    """
     plate_upper = plate_filter.strip().upper()
     vendor_selected = vendor_filter.strip()
+    status_selected = status_filter.strip()
     groups: List[Dict[str, Any]] = []
     all_rows: List[Dict[str, Any]] = []
     grand_total = 0.0
 
-    for label, statuses in STATUS_GROUPS.items():
+    status_items = STATUS_GROUPS.items()
+    if status_selected:
+        if status_selected not in STATUS_GROUPS:
+            raise ValueError(
+                f"Unknown status filter '{status_selected}'. "
+                f"Use one of: {', '.join(STATUS_GROUPS.keys())}."
+            )
+        status_items = [(status_selected, STATUS_GROUPS[status_selected])]
+
+    for label, statuses in status_items:
         data = list_requisitions_by_status(db_path, statuses)
         if plate_upper:
             data = [
@@ -93,6 +137,7 @@ def build_report(
         "rows": all_rows,
         "grand_total": grand_total,
         "vendors": list_vendors(db_path),
+        "status_options": list(STATUS_GROUPS.keys()),
     }
 
 
@@ -102,7 +147,8 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
     writer = csv.writer(buffer)
     writer.writerow([
         "Serial #", "Plate", "Quantity", "Unit", "Total Price", "Vendor",
-        "Status", "Status Group", "PO Ref", "Invoice #", "Requested By", "Created",
+        "Status", "Status Group", "Payment", "PO Ref", "Invoice #", "CC Stmt #",
+        "Requested By", "Created",
     ])
     for row in rows:
         qty = row.get("quantity") or ""
@@ -110,6 +156,7 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
         if str(unit).upper() == "FULLTANK":
             qty = "Full Tank"
             unit = "FULLTANK"
+        payment = _payment_label(row)
         writer.writerow([
             row.get("serial_number") or "",
             row.get("plate_number") or "",
@@ -119,8 +166,10 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
             row.get("vendor_name") or "",
             row.get("status") or "",
             row.get("status_group") or "",
+            payment,
             row.get("po_reference") or "",
             row.get("invoice_number") or "",
+            row.get("cc_statement_reference") or "",
             row.get("requester_name") or "",
             row.get("created_at") or "",
         ])

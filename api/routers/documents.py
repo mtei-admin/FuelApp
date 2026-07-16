@@ -28,11 +28,12 @@ class BilledSummaryRequest(BaseModel):
 def download_po_pdf(
     requisition_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: DocUser,
+    user: DocUser,
 ) -> Response:
     """Download purchase order PDF for a requisition."""
     try:
-        pdf_bytes = pdf_service.build_po_pdf_bytes(db_path, requisition_id)
+        downloader_name = user.get("full_name") or user.get("username") or ""
+        pdf_bytes = pdf_service.build_po_pdf_bytes(db_path, requisition_id, downloader_name)
     except RuntimeError as error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

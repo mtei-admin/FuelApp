@@ -1,3 +1,12 @@
+/** Parse digits-only input into a non-negative integer (liters). */
+export function parsePositiveInteger(raw: string): number {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) {
+    return 0;
+  }
+  return parseInt(digits, 10);
+}
+
 /** Format quantity for display. */
 export function formatQuantity(quantity: number, unit: string): string {
   if (unit && unit.toUpperCase() === "FULLTANK") {
@@ -44,4 +53,56 @@ export function getFuelTypeOptions(
 
 export function unitToQuantityMode(unit: string): "numeric" | "fulltank" {
   return unit && unit.toUpperCase() === "FULLTANK" ? "fulltank" : "numeric";
+}
+
+/** Avatar initials from full name or username. */
+export function userInitials(
+  fullName?: string | null,
+  username?: string | null,
+): string {
+  const name = fullName?.trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  }
+  return (username ?? "?").slice(0, 2).toUpperCase();
+}
+
+/** Human-readable role label for UI. */
+export function formatRoleLabel(role?: string | null): string {
+  const value = (role ?? "").toLowerCase();
+  if (!value) {
+    return "Encoder";
+  }
+  if (value === "encoder" || value === "user") {
+    return "Encoder";
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/** Relative last-seen label for active users. */
+export function formatLastSeen(timestamp?: string | null): string {
+  if (!timestamp) {
+    return "—";
+  }
+  const seen = new Date(timestamp.replace(" ", "T"));
+  if (Number.isNaN(seen.getTime())) {
+    return timestamp;
+  }
+  const diffMs = Date.now() - seen.getTime();
+  const diffMin = Math.max(0, Math.floor(diffMs / 60000));
+  if (diffMin < 1) {
+    return "just now";
+  }
+  if (diffMin < 60) {
+    return `${diffMin} min ago`;
+  }
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) {
+    return `${diffHours} hr ago`;
+  }
+  return seen.toLocaleString();
 }

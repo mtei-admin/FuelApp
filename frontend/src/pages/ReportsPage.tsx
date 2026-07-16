@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import * as reportsApi from "../api/reports";
 import type { ReportFilters, ReportSummary } from "../api/reports";
+import { REPORT_STATUS_OPTIONS } from "../api/reports";
 import { ApiError } from "../api/client";
 import { formatPeso, formatQuantity } from "../utils/format";
 import { downloadFile } from "../utils/download";
@@ -27,6 +28,10 @@ export function ReportsPage() {
     load();
   }, [load]);
 
+  const statusOptions = report?.status_options?.length
+    ? report.status_options
+    : [...REPORT_STATUS_OPTIONS];
+
   if (loading && !report) {
     return <p className="loading">Loading reports...</p>;
   }
@@ -40,17 +45,19 @@ export function ReportsPage() {
       {error && <p className="error banner">{error}</p>}
 
       <section className="panel filters-grid">
-        <div>
-          <label>Plate number</label>
+        <div className="filter-field">
+          <label htmlFor="report-plate">Plate number</label>
           <input
+            id="report-plate"
             value={filters.plate ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, plate: e.target.value }))}
             placeholder="Partial match"
           />
         </div>
-        <div>
-          <label>Vendor</label>
+        <div className="filter-field">
+          <label htmlFor="report-vendor">Vendor</label>
           <select
+            id="report-vendor"
             value={filters.vendor ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, vendor: e.target.value }))}
           >
@@ -62,25 +69,61 @@ export function ReportsPage() {
             ))}
           </select>
         </div>
-        <div>
-          <label>From date</label>
+        <div className="filter-field">
+          <label htmlFor="report-status">Status</label>
+          <select
+            id="report-status"
+            value={filters.status ?? ""}
+            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+          >
+            <option value="">(All statuses)</option>
+            {statusOptions.map((label) => (
+              <option key={label} value={label}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-field">
+          <label htmlFor="report-from">From date</label>
           <input
+            id="report-from"
             type="date"
             value={filters.from ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
           />
         </div>
-        <div>
-          <label>To date</label>
+        <div className="filter-field">
+          <label htmlFor="report-to">To date</label>
           <input
+            id="report-to"
             type="date"
             value={filters.to ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
           />
         </div>
-        <div className="filter-actions">
-          <button type="button" onClick={load}>
+        <div className="filter-field">
+          <label className="filter-actions-label" htmlFor="report-apply" aria-hidden="true">
+            &nbsp;
+          </label>
+          <button id="report-apply" type="button" onClick={load}>
             Apply Filters
+          </button>
+        </div>
+        <div className="filter-field">
+          <label className="filter-actions-label" htmlFor="report-reset" aria-hidden="true">
+            &nbsp;
+          </label>
+          <button
+            id="report-reset"
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setFilters({});
+              setError(null);
+            }}
+          >
+            Reset Filters
           </button>
         </div>
       </section>

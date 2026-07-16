@@ -134,12 +134,12 @@ def _render_desktop_approvals(
     """Render the existing desktop/table approvals layout."""
     # Header row
     header_cols = st.columns([1.5, 2, 2, 2, 2, 2, 2])
-    header_cols[0].markdown("**Serial #**")
+    header_cols[0].markdown("**Request #**")
     header_cols[1].markdown("**Vehicle**")
     header_cols[2].markdown("**Quantity**")
     header_cols[3].markdown("**Vendor**")
     header_cols[4].markdown("**Total Price**")
-    header_cols[5].markdown("**Requested By**")
+    header_cols[5].markdown("**Requestor**")
     header_cols[6].markdown("**Action**")
     st.divider()
 
@@ -161,7 +161,7 @@ def _render_desktop_approvals(
             cols[4].write(f"₱{display_total:,.2f}")
         else:
             cols[4].write("—")
-        cols[5].write(req.get("requester_name") or "—")
+        cols[5].write(req.get("requestor_name") or req.get("requester_name") or "—")
 
         # Only show edit/approve/reject buttons for approvers, accounting, and superuser
         if can_approve:
@@ -224,7 +224,7 @@ def _render_mobile_approvals(
 
     for req in pending:
         with st.container():
-            st.markdown(f"**Serial #:** {req.get('serial_number', '—')}")
+            st.markdown(f"**Request #:** {req.get('serial_number', '—')}")
             vehicle_display = f"{req['plate_number']} - {req.get('model') or '—'}"
             st.markdown(f"**Vehicle:** {vehicle_display}")
             st.markdown(f"**Vendor:** {req.get('vendor_name') or '—'}")
@@ -239,7 +239,9 @@ def _render_mobile_approvals(
                 st.markdown(f"**Total Price:** ₱{display_total:,.2f}")
             else:
                 st.markdown("**Total Price:** —")
-            st.markdown(f"**Requested By:** {req.get('requester_name') or '—'}")
+            st.markdown(
+                f"**Requestor:** {req.get('requestor_name') or req.get('requester_name') or '—'}"
+            )
 
             if can_approve:
                 col1, col2, col3 = st.columns(3)
@@ -307,11 +309,13 @@ def show_approve_confirmation():
     qty_text = "Full Tank" if req.get("unit") and req.get("unit").upper() == "FULLTANK" else f"{req['quantity']} liters"
     
     st.write("**Please review the request details:**")
-    st.write(f"**Serial #:** {req.get('serial_number', '—')}")
+    st.write(f"**Request #:** {req.get('serial_number', '—')}")
     st.write(f"**Vehicle:** {req['plate_number']}")
     st.write(f"**Vendor:** {req.get('vendor_name') or '—'}")
     st.write(f"**Quantity:** {qty_text}")
-    st.write(f"**Requested By:** {req.get('requester_name') or '—'}")
+    st.write(
+        f"**Requestor:** {req.get('requestor_name') or req.get('requester_name') or '—'}"
+    )
     st.write("")
     st.write("Are you sure you want to **approve** this request?")
     
@@ -341,11 +345,13 @@ def show_reject_confirmation():
     qty_text = "Full Tank" if req.get("unit") and req.get("unit").upper() == "FULLTANK" else f"{req['quantity']} liters"
     
     st.write("**Please review the request details:**")
-    st.write(f"**Serial #:** {req.get('serial_number', '—')}")
+    st.write(f"**Request #:** {req.get('serial_number', '—')}")
     st.write(f"**Vehicle:** {req['plate_number']}")
     st.write(f"**Vendor:** {req.get('vendor_name') or '—'}")
     st.write(f"**Quantity:** {qty_text}")
-    st.write(f"**Requested By:** {req.get('requester_name') or '—'}")
+    st.write(
+        f"**Requestor:** {req.get('requestor_name') or req.get('requester_name') or '—'}"
+    )
     st.write("")
     st.warning("Are you sure you want to **reject** this request?")
     
@@ -425,7 +431,7 @@ def render_edit_quantity_form(
         st.error("Requisition not found.")
         return
 
-    st.subheader(f"Edit Quantity - Serial # {full_req.get('serial_number', '—')}")
+    st.subheader(f"Edit Quantity - Request # {full_req.get('serial_number', '—')}")
     st.caption("You can modify the requested quantity before approving this request.")
 
     # Display read-only fields

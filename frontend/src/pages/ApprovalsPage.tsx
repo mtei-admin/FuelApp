@@ -1,10 +1,16 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import * as approvalsApi from "../api/approvals";
+import * as purchasingApi from "../api/purchasing";
+import type { PurchasingRequisition } from "../api/purchasing";
 import { ApiError } from "../api/client";
+import { AdminEditDialog } from "../features/purchasing/AdminEditDialog";
+import { CancelApprovedDialog } from "../features/approvals/CancelApprovedDialog";
+import { ApproveDialog } from "../features/approvals/ApproveDialog";
+import { VehicleHistoryModal } from "../features/approvals/VehicleHistoryModal";
 import { useAuth } from "../context/AuthContext";
 import type { PendingRequisition } from "../types/requisition";
 import { formatPeso, formatQuantity, unitToQuantityMode } from "../utils/format";
-import { canApproveRequests } from "../utils/roles";
+import { canApproveRequests, canManageUsers } from "../utils/roles";
 
 function EditQuantityForm({
   req,
@@ -97,35 +103,72 @@ function EditQuantityForm({
 export function ApprovalsPage() {
   const { user } = useAuth();
   const canApprove = canApproveRequests(user?.role);
+  const isSuperuser = canManageUsers(user?.role);
   const [pending, setPending] = useState<PendingRequisition[]>([]);
+  const [approvedAwaiting, setApprovedAwaiting] = useState<PendingRequisition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<PendingRequisition | null>(null);
+  const [adminEditing, setAdminEditing] = useState<PendingRequisition | null>(null);
+  const [approving, setApproving] = useState<PendingRequisition | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<PendingRequisition | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<PendingRequisition | null>(null);
 
   const loadPending = useCallback(async () => {
     setError(null);
     try {
-      setPending(await approvalsApi.listPendingApprovals());
+      const pendingRows = await approvalsApi.listPendingApprovals();
+      setPending(pendingRows);
+      if (canApproveRequests(user?.role)) {
+        setApprovedAwaiting(await approvalsApi.listApprovedAwaitingPo());
+      } else {
+        setApprovedAwaiting([]);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load approvals");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.role]);
 
   useEffect(() => {
     loadPending();
   }, [loadPending]);
 
   async function handleApprove(req: PendingRequisition) {
-    if (!window.confirm(`Approve request ${req.serial_number}?`)) {
-      return;
-    }
     try {
       await approvalsApi.approveRequisition(req.id);
+      setApproving(null);
       await loadPending();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Approve failed");
+      throw err instanceof ApiError ? err : new ApiError(0, "Approve failed");
+    }
+  }
+
+  function openApproveDialog(req: PendingRequisition) {
+    setApproving(req);
+  }
+
+  function openHistory(req: PendingRequisition) {
+    if (!req.vehicle_id) {
+      setError("Vehicle not linked; history unavailable.");
+      return;
+    }
+    setHistoryTarget(req);
+  }
+
+  function vehicleLabel(req: PendingRequisition): string {
+    return `${req.plate_number ?? "—"} - ${req.model ?? "—"}`;
+  }
+
+  async function handleCancelApproved(reason: string) {
+    if (!cancelTarget) return;
+    try {
+      await approvalsApi.cancelApprovedRequisition(cancelTarget.id, reason);
+      setCancelTarget(null);
+      await loadPending();
+    } catch (err) {
+      throw err instanceof ApiError ? err : new ApiError(0, "Cancel failed");
     }
   }
 
@@ -166,12 +209,12 @@ export function ApprovalsPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Serial #</th>
+                  <th>Request #</th>
                   <th>Vehicle</th>
                   <th>Quantity</th>
                   <th>Vendor</th>
                   <th>Total</th>
-                  <th>Requested By</th>
+                  <th>Requestor</th>
                   <th>Action</th>
                 </tr>
               </thead>
@@ -185,14 +228,31 @@ export function ApprovalsPage() {
                     <td>{formatQuantity(req.quantity, req.unit)}</td>
                     <td>{req.vendor_name ?? "—"}</td>
                     <td>{formatPeso(req.display_total)}</td>
-                    <td>{req.requester_name ?? "—"}</td>
+                    <td>{req.requestor_name ?? req.requester_name ?? "—"}</td>
                     <td className="actions">
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => openHistory(req)}
+                        disabled={!req.vehicle_id}
+                      >
+                        History
+                      </button>
                       {canApprove ? (
                         <>
+                          {isSuperuser && (
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => setAdminEditing(req)}
+                            >
+                              Admin Edit
+                            </button>
+                          )}
                           <button type="button" onClick={() => setEditing(req)}>
                             Edit
                           </button>
-                          <button type="button" onClick={() => handleApprove(req)}>
+                          <button type="button" onClick={() => openApproveDialog(req)}>
                             Approve
                           </button>
                           <button
@@ -217,7 +277,7 @@ export function ApprovalsPage() {
             {pending.map((req) => (
               <article key={req.id} className="approval-card">
                 <p>
-                  <strong>Serial #:</strong> {req.serial_number}
+                  <strong>Request #:</strong> {req.serial_number}
                 </p>
                 <p>
                   <strong>Vehicle:</strong> {req.plate_number} - {req.model}
@@ -232,29 +292,105 @@ export function ApprovalsPage() {
                   <strong>Total:</strong> {formatPeso(req.display_total)}
                 </p>
                 <p>
-                  <strong>Requested By:</strong> {req.requester_name ?? "—"}
+                  <strong>Requestor:</strong> {req.requestor_name ?? req.requester_name ?? "—"}
                 </p>
-                {canApprove && (
-                  <div className="actions">
-                    <button type="button" onClick={() => setEditing(req)}>
-                      Edit
-                    </button>
-                    <button type="button" onClick={() => handleApprove(req)}>
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => handleReject(req)}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => openHistory(req)}
+                    disabled={!req.vehicle_id}
+                  >
+                    History
+                  </button>
+                  {canApprove && (
+                    <>
+                      {isSuperuser && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setAdminEditing(req)}
+                        >
+                          Admin Edit
+                        </button>
+                      )}
+                      <button type="button" onClick={() => setEditing(req)}>
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => openApproveDialog(req)}>
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => handleReject(req)}
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+                </div>
               </article>
             ))}
           </div>
         </>
+      )}
+
+      {canApprove && (
+        <section className="panel">
+          <h2>Approved — cancel if needed</h2>
+          <p className="muted">
+            Void an approval before Purchasing generates a PO. A reason is required and
+            logged.
+          </p>
+          {approvedAwaiting.length === 0 ? (
+            <p className="empty">No approved requests awaiting PO.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Request #</th>
+                  <th>Vehicle / Vendor</th>
+                  <th>Fuel Type</th>
+                  <th>Qty</th>
+                  <th>Approved By</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {approvedAwaiting.map((req) => (
+                  <tr key={req.id}>
+                    <td>{req.serial_number}</td>
+                    <td>
+                      {req.plate_number} — {req.vendor_name}
+                    </td>
+                    <td>{req.fuel_type ?? "—"}</td>
+                    <td>{formatQuantity(req.quantity, req.unit)}</td>
+                    <td>{req.approved_by ?? "—"}</td>
+                    <td className="actions">
+                      {isSuperuser && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setAdminEditing(req)}
+                        >
+                          Admin Edit
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => setCancelTarget(req)}
+                      >
+                        Cancel
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
       )}
 
       {editing && canApprove && (
@@ -265,6 +401,43 @@ export function ApprovalsPage() {
             loadPending();
           }}
           onCancel={() => setEditing(null)}
+        />
+      )}
+
+      {approving && canApprove && (
+        <ApproveDialog
+          req={approving}
+          onApprove={() => handleApprove(approving)}
+          onCancel={() => setApproving(null)}
+        />
+      )}
+
+      {historyTarget?.vehicle_id && (
+        <VehicleHistoryModal
+          vehicleId={historyTarget.vehicle_id}
+          vehicleLabel={vehicleLabel(historyTarget)}
+          highlightRequisitionId={historyTarget.id}
+          onClose={() => setHistoryTarget(null)}
+        />
+      )}
+
+      {cancelTarget && canApprove && (
+        <CancelApprovedDialog
+          req={cancelTarget}
+          onCancel={handleCancelApproved}
+          onClose={() => setCancelTarget(null)}
+        />
+      )}
+
+      {adminEditing && (
+        <AdminEditDialog
+          req={adminEditing as PurchasingRequisition}
+          onSave={async (payload) => {
+            await purchasingApi.adminEdit(adminEditing.id, payload);
+            setAdminEditing(null);
+            await loadPending();
+          }}
+          onCancel={() => setAdminEditing(null)}
         />
       )}
     </div>

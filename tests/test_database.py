@@ -67,9 +67,9 @@ def test_upsert_vendor(temp_db):
 
 
 def test_upsert_car(temp_db):
-    """Test car creation."""
+    """Test car creation with hyphenated plate."""
     vendor_id = upsert_vendor(temp_db, "Test Vendor")
-    car_id = upsert_car(temp_db, "ABC-123", "Test Model", vendor_id)
+    car_id = upsert_car(temp_db, "ABC-123", "Test Model", vendor_id, assigned_to="Driver")
     assert car_id > 0
     
     cars = list_cars(temp_db)
@@ -78,14 +78,23 @@ def test_upsert_car(temp_db):
     assert cars[0]["model"] == "Test Model"
 
 
+def test_upsert_car_rejects_special_characters(temp_db):
+    """Disallowed punctuation is rejected."""
+    vendor_id = upsert_vendor(temp_db, "Test Vendor")
+    with pytest.raises(RuntimeError, match="letters, numbers"):
+        upsert_car(temp_db, "ABC/123", "Test Model", vendor_id, assigned_to="Driver")
+
+
 def test_create_requisition(temp_db):
     """Test requisition creation."""
     from src.auth import hash_password
     
     # Setup: create user and car
-    user_id = create_user(temp_db, "requester", hash_password("pass"), "user")
+    user_id = create_user(
+        temp_db, "requester", hash_password("pass"), "encoder", full_name="Requester"
+    )
     vendor_id = upsert_vendor(temp_db, "Fuel Vendor")
-    car_id = upsert_car(temp_db, "XYZ-789", "Test Car", vendor_id)
+    car_id = upsert_car(temp_db, "XYZ789", "Test Car", vendor_id, assigned_to="Driver")
     
     # Create requisition
     req_id = create_requisition(

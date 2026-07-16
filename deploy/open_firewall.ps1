@@ -15,6 +15,6 @@ New-NetFirewallRule `
     -Protocol TCP `
     -LocalPort 8000 `
     -Action Allow `
-    -Profile Domain, Private | Out-Null
+    -Profile Domain, Private, Public | Out-Null
 
-Write-Host "Firewall rule created: inbound TCP 8000 allowed (Domain, Private profiles)."
+Write-Host "Firewall rule created: inbound TCP 8000 allowed (Domain, Private, Public profiles)."

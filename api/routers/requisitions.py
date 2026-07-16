@@ -89,6 +89,8 @@ def create_requisition(
             quantity=payload.quantity,
             notes=payload.notes,
             requestor_name=payload.requestor_name,
+            settlement_type=payload.settlement_type,
+            actor=user,
         )
         row = requisition_service.get_requisition(
             db_path, req_id, user["id"], user["role"]
@@ -107,7 +109,7 @@ def update_requisition_route(
     db_path: Annotated[str, Depends(get_db_path)],
     user: Annotated[dict, Depends(get_current_user)],
 ) -> RequisitionResponse:
-    """Update a pending requisition (one-time edit rules apply)."""
+    """Update a pending requisition (one-time edit rules apply; superuser: any status)."""
     try:
         requisition_service.save_requisition(
             db_path,
@@ -120,6 +122,8 @@ def update_requisition_route(
             payload.quantity_mode,
             payload.quantity,
             payload.notes,
+            settlement_type=payload.settlement_type,
+            actor=user,
         )
         row = requisition_service.get_requisition(
             db_path, requisition_id, user["id"], user["role"]

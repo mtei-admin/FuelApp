@@ -13,7 +13,11 @@ from src.database import (
     update_requisition_received,
     upsert_vendor_fuel_prices,
 )
-from src.utils.pdf_gen import generate_purchase_order_pdf, render_purchase_order_html
+from src.utils.pdf_gen import (
+    generate_purchase_order_pdf,
+    plate_shows_container_warning,
+    render_purchase_order_html,
+)
 
 DEFAULT_DB_PATH = Path("data") / "fuel_system.db"
 
@@ -39,7 +43,7 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
 
     # Allow fuel price updates anytime (all purchasing-access roles except plain "user").
     role = current_user.get("role", "").lower()
-    if role != "user":
+    if role != "encoder":
         if st.button("Update Fuel Prices", key="update_fuel_prices_anytime"):
             st.session_state["price_update_prompt_shown"] = True
             st.session_state["show_price_update_dialog"] = True
@@ -418,7 +422,7 @@ def render_receiving(db_path: str) -> None:
                 st.error(str(error))
 
 
-def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str) -> bytes:
+def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str, downloader_name: str = "") -> bytes:
     """Build PO PDF bytes from requisition context."""
     from datetime import datetime
     from pathlib import Path
@@ -429,9 +433,50 @@ def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str) -> bytes:
     # Use current date when generating PO (not requisition creation date)
     po_date = datetime.now().strftime("%B %d, %Y")
 
-    # Get absolute paths for logos by vehicle company (xhtml2pdf requires absolute paths)
+    # Get absolute paths for logos and header details by vehicle company
     assets_dir = Path("assets").resolve()
     company = (req.get("company") or "").strip().upper()
+
+    # Company header details (name, address, contacts)
+    _COMPANY_HEADERS = {
+        "MTEI": {
+            "header_company_name": "MODERN TIME ENTERPRISES, INC.",
+            "header_address": "SPK Bldg., KM 7, Lanang, Davao City, Philippines 8000",
+            "header_contact": "Tell Nos.: (+6382) 300.9800; (+6382) 305.7267; (+6382) 300.9799; (+6382) 235.1983 \u2013 84",
+            "header_email": "Email: moderntime@mteinc.net",
+            "header_email2": "sales@mteinc.net",
+        },
+        "DIC": {
+            "header_company_name": "DOMINIC INFINIZA CORPORATION",
+            "header_address": "Unit 1B 2F Alpha Bldg., Lanang Business Park, Km 7, JP Laurel Ave., Davao City",
+            "header_contact": "+63917.806.0338 / +63998.575.8722",
+            "header_email": "Email: r.yulo@eskina.ph",
+            "header_email2": "",
+        },
+        "DSRDC": {
+            "header_company_name": "DOMINIC AND SONS REALTY & DEVELOPMENT CORP.",
+            "header_address": "SPK Bldg, Km 7, Lanang, Davao City, Philippines 8000",
+            "header_contact": "+6382.3000.9800 / +6382.300.9799 local 115",
+            "header_email": "Email: admin@dominicandsons.ph",
+            "header_email2": "",
+        },
+        "GCEIC": {
+            "header_company_name": "MODERN TIME ENTERPRISES, INC.",
+            "header_address": "SPK Bldg., KM 7, Lanang, Davao City, Philippines 8000",
+            "header_contact": "Tell Nos.: (+6382) 300.9800; (+6382) 305.7267; (+6382) 300.9799; (+6382) 235.1983 \u2013 84",
+            "header_email": "Email: moderntime@mteinc.net",
+            "header_email2": "sales@mteinc.net",
+        },
+        "MTEI TRUCKING": {
+            "header_company_name": "MODERN TIME ENTERPRISES, INC.",
+            "header_address": "SPK Bldg., KM 7, Lanang, Davao City, Philippines 8000",
+            "header_contact": "Tell Nos.: (+6382) 300.9800; (+6382) 305.7267; (+6382) 300.9799; (+6382) 235.1983 \u2013 84",
+            "header_email": "Email: moderntime@mteinc.net",
+            "header_email2": "sales@mteinc.net",
+        },
+    }
+    header_info = _COMPANY_HEADERS.get(company, _COMPANY_HEADERS["MTEI"])
+
     if company == "DIC":
         logo_left = assets_dir / "dic_logo.png"
         logo_right = assets_dir / "eskina_logo.png"
@@ -442,7 +487,6 @@ def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str) -> bytes:
         logo_mte_path = str(logo_left) if logo_left.exists() else ""
         logo_planters_path = ""
     else:
-        # Default: no company or other — MTE left, Planters right
         logo_mte = assets_dir / "mte_logo.png"
         logo_planters = assets_dir / "planters_logo.png"
         logo_mte_path = str(logo_mte) if logo_mte.exists() else ""
@@ -451,18 +495,12 @@ def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str) -> bytes:
     qty_display = "Full Tank" if req.get("unit", "").upper() == "FULLTANK" else req.get("quantity") or ""
     unit_display = "LITERS"
 
-    # Use requester's full name from Users table (fallback to stored requestor_name or username)
-    requester_id = req.get("requester_id")
-    requestor_full_name = ""
-    if requester_id is not None:
-        try:
-            requestor_full_name = fetch_full_name_by_id(db_path, int(requester_id)) or ""
-        except (TypeError, ValueError):
-            pass
-    if not requestor_full_name:
-        requestor_full_name = req.get("requester_name") or req.get("requestor_name") or ""
+    # Requestor from the Request form (who fuel is for), not the encoder account.
+    requestor_display = (req.get("requestor_name") or "").strip()
+    if not requestor_display:
+        requestor_display = (req.get("requester_name") or "").strip()
     plate_number = req.get("plate_number") or ""
-    remarks_value = f"FOR {requestor_full_name} WITH PLATE NO {plate_number}"
+    remarks_value = f"FOR {requestor_display} WITH PLATE NO {plate_number}"
 
     context = {
         "po_reference": po_reference or req.get("po_reference") or "",
@@ -473,14 +511,17 @@ def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str) -> bytes:
         "quantity": qty_display,
         "unit": unit_display,
         "fuel_type": req.get("fuel_type") or "",
-        "unit_price": f"₱ {(unit_price or 0):,.2f}",
-        "total_price": f"₱ {(total_price or 0):,.2f}",
+        "unit_price": f"Php {(unit_price or 0):,.2f}",
+        "total_price": f"Php {(total_price or 0):,.2f}",
         "remarks": remarks_value,
         "notes": remarks_value,
-        "requested_by": requestor_full_name,
-        "approved_by": req.get("approved_by") or "",
+        "prepared_by": downloader_name or req.get("prepared_by") or "",
+        "approved_by": req.get("po_signatory") or req.get("approved_by") or "",
         "logo_mte_path": logo_mte_path,
         "logo_planters_path": logo_planters_path,
+        "plate_number": plate_number,
+        "show_container_warning": plate_shows_container_warning(plate_number),
+        **header_info,
     }
     html = render_purchase_order_html(context)
     return generate_purchase_order_pdf(context | {"html": html})

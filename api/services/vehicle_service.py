@@ -1,7 +1,16 @@
 """Vehicle master data service."""
 from typing import Any, Dict, List, Optional
 
-from src.database import list_cars, soft_delete_car, update_car, upsert_car
+from src.audit import VEHICLE_AUDIT_FIELDS, log_audit, log_field_update, pick_fields
+from src.database import (
+    assert_company_assignable,
+    fetch_car_by_id,
+    list_cars,
+    soft_delete_car,
+    update_car,
+    upsert_car,
+)
+from src.utils.plate import normalize_plate_number
 
 
 def get_active_vehicles(db_path: str) -> List[Dict[str, Any]]:
@@ -15,19 +24,35 @@ def create_vehicle(
     model: str,
     fuel_type: str,
     company: str,
+    assigned_to: str,
     vendor_id: Optional[int] = None,
-    driver_name: Optional[str] = None,
+    actor: Optional[Dict[str, Any]] = None,
 ) -> int:
     """Create or reactivate a vehicle by plate number."""
-    return upsert_car(
+    company_code = assert_company_assignable(db_path, company)
+    try:
+        plate = normalize_plate_number(plate_number)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
+    car_id = upsert_car(
         db_path,
-        plate_number.strip(),
+        plate,
         model.strip(),
         vendor_id,
         fuel_type,
-        company,
-        driver_name,
+        company_code,
+        assigned_to.strip(),
     )
+    created = fetch_car_by_id(db_path, car_id)
+    log_audit(
+        db_path,
+        "vehicle",
+        car_id,
+        "created",
+        actor,
+        new_values=pick_fields(created, VEHICLE_AUDIT_FIELDS),
+    )
+    return car_id
 
 
 def save_vehicle(
@@ -37,21 +62,59 @@ def save_vehicle(
     model: str,
     fuel_type: str,
     company: str,
+    assigned_to: str,
     vendor_id: Optional[int] = None,
-    driver_name: Optional[str] = None,
+    actor: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Update an existing vehicle."""
+    before = fetch_car_by_id(db_path, car_id)
+    previous_company = (before or {}).get("company")
+    company_code = assert_company_assignable(
+        db_path, company, previous_code=previous_company
+    )
+    try:
+        plate = normalize_plate_number(plate_number)
+    except ValueError as error:
+        raise RuntimeError(str(error)) from error
     update_car(
         db_path,
         car_id,
-        plate_number.strip(),
+        plate,
         model.strip(),
         vendor_id,
         fuel_type,
-        company,
+        company_code,
+        assigned_to.strip(),
+    )
+    after = fetch_car_by_id(db_path, car_id)
+    log_field_update(
+        db_path,
+        "vehicle",
+        car_id,
+        "updated",
+        actor,
+        before,
+        after,
+        VEHICLE_AUDIT_FIELDS,
     )
 
 
-def deactivate_vehicle(db_path: str, car_id: int) -> None:
+def deactivate_vehicle(
+    db_path: str,
+    car_id: int,
+    actor: Optional[Dict[str, Any]] = None,
+) -> None:
     """Soft-delete a vehicle."""
+    before = fetch_car_by_id(db_path, car_id)
     soft_delete_car(db_path, car_id)
+    after = fetch_car_by_id(db_path, car_id)
+    log_field_update(
+        db_path,
+        "vehicle",
+        car_id,
+        "deactivated",
+        actor,
+        before,
+        after,
+        ["is_active"],
+    )

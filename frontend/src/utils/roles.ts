@@ -1,6 +1,7 @@
 /** Role helpers mirroring Streamlit sidebar access rules. */
 
-const MASTER_DATA_ROLES = new Set(["approver", "accounting", "superuser"]);
+const MASTER_DATA_ROLES = new Set(["approver", "purchaser", "accounting", "superuser"]);
+const ENCODE_ROLES = new Set(["encoder"]);
 const APPROVALS_VIEW_ROLES = new Set([
   "approver",
   "purchaser",
@@ -13,8 +14,23 @@ const BILLING_ROLES = new Set(["purchaser", "accounting", "superuser"]);
 const REPORTS_ROLES = new Set(["accounting", "superuser"]);
 const DASHBOARD_ROLES = new Set(["accounting", "superuser"]);
 
+export function canAccessEncode(role: string | undefined): boolean {
+  const normalized = (role ?? "").toLowerCase();
+  return ENCODE_ROLES.has(normalized) || normalized === "user";
+}
+
 export function canAccessMasterData(role: string | undefined): boolean {
   return MASTER_DATA_ROLES.has((role ?? "").toLowerCase());
+}
+
+/** Superuser (admin) — user enrollment on Master Data > Users tab. */
+export function canManageUsers(role: string | undefined): boolean {
+  return (role ?? "").toLowerCase() === "superuser";
+}
+
+/** Superuser — active session list (sidebar Active Users page). */
+export function canViewActiveUsers(role: string | undefined): boolean {
+  return (role ?? "").toLowerCase() === "superuser";
 }
 
 export function canAccessApprovals(role: string | undefined): boolean {
@@ -39,6 +55,15 @@ export function canAccessReports(role: string | undefined): boolean {
 
 export function canAccessDashboard(role: string | undefined): boolean {
   return DASHBOARD_ROLES.has((role ?? "").toLowerCase());
+}
+
+/** Accounting/superuser — transaction logs under Audit menu. */
+export function canViewAuditTrail(role: string | undefined): boolean {
+  return REPORTS_ROLES.has((role ?? "").toLowerCase());
+}
+
+export function canAccessAudit(role: string | undefined): boolean {
+  return canViewAuditTrail(role) || canViewActiveUsers(role);
 }
 
 export function normalizeRole(role: string | undefined): string {

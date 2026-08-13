@@ -21,6 +21,7 @@ export interface BillingItem {
   requestor_name?: string | null;
   cc_card_reference?: string | null;
   cc_statement_reference?: string | null;
+  cc_reconcile_report_no?: string | null;
   cc_reconciled_at?: string | null;
   cc_reconciled_by?: string | null;
   invoice_number?: string | null;
@@ -39,6 +40,7 @@ export interface BillingQueueCounts {
 }
 
 export interface CcReconcileSummary {
+  report_number: string;
   statement_reference: string;
   reconciled_date: string;
   items: BillingItem[];
@@ -62,6 +64,30 @@ export async function markBilled(
       requisition_ids: requisitionIds,
       invoice_number: invoiceNumber,
     }),
+  });
+}
+
+export async function listBilled(): Promise<BillingItem[]> {
+  return apiFetch<BillingItem[]>("/api/billing/billed");
+}
+
+export async function updateBillingReference(
+  requisitionIds: number[],
+  invoiceNumber: string,
+): Promise<void> {
+  await apiFetch("/api/billing/update-billing-reference", {
+    method: "POST",
+    body: JSON.stringify({
+      requisition_ids: requisitionIds,
+      invoice_number: invoiceNumber,
+    }),
+  });
+}
+
+export async function unbillItems(requisitionIds: number[]): Promise<void> {
+  await apiFetch("/api/billing/unbill", {
+    method: "POST",
+    body: JSON.stringify({ requisition_ids: requisitionIds }),
   });
 }
 

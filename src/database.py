@@ -616,6 +616,7 @@ def _ensure_requisition_columns(connection: sqlite3.Connection) -> None:
         "settlement_type": "TEXT",
         "cc_card_reference": "TEXT",
         "cc_statement_reference": "TEXT",
+        "cc_reconcile_report_no": "TEXT",
         "cc_reconciled_at": "TEXT",
         "cc_reconciled_by": "TEXT",
     }
@@ -687,6 +688,7 @@ def _requisition_list_select() -> str:
                     r.settlement_type,
                     r.cc_card_reference,
                     r.cc_statement_reference,
+                    r.cc_reconcile_report_no,
                     r.cc_reconciled_at,
                     r.cc_reconciled_by,
                     r.created_at,
@@ -1819,6 +1821,7 @@ _ADMIN_EDITABLE_COLUMNS = {
     "settlement_type",
     "cc_card_reference",
     "cc_statement_reference",
+    "cc_reconcile_report_no",
     "cc_reconciled_at",
     "cc_reconciled_by",
     "cancel_reason",
@@ -2686,33 +2689,67 @@ def record_cc_fill(
         raise RuntimeError(message) from error
 
 
+def _generate_cc_reconcile_report_no(connection: sqlite3.Connection) -> str:
+    """
+    Allocate a local-time report number as yyyymmddhhmmss (suffix if collision).
+
+    Args:
+        connection: Open SQLite connection.
+
+    Returns:
+        Unique report number string.
+    """
+    base = datetime.now().strftime("%Y%m%d%H%M%S")
+    candidate = base
+    suffix = 0
+    while True:
+        cursor = connection.execute(
+            """
+            SELECT 1 FROM requisitions
+            WHERE cc_reconcile_report_no = ?
+            LIMIT 1
+            """,
+            (candidate,),
+        )
+        if cursor.fetchone() is None:
+            return candidate
+        suffix += 1
+        candidate = f"{base}-{suffix:02d}"
+
+
 def mark_cc_reconciled(
     db_path: str,
     requisition_ids: List[int],
     statement_reference: str,
     reconciled_by: str,
-) -> None:
+    report_number: Optional[str] = None,
+) -> str:
     """
     Mark paid_cc requisitions as reconciled against a card statement.
 
     Args:
         db_path: Database path.
         requisition_ids: IDs to reconcile.
-        statement_reference: Card statement period or reference number.
+        statement_reference: Optional card statement period or reference number.
         reconciled_by: Display name of accounting user.
+        report_number: Optional pre-allocated report number; generated if omitted.
+
+    Returns:
+        The system report number applied to the batch (yyyymmddhhmmss).
 
     Raises:
         RuntimeError: If validation fails or rows are not eligible.
     """
     if not requisition_ids:
         raise RuntimeError("Select at least one item to reconcile.")
-    statement_ref = (statement_reference or "").strip()
-    if not statement_ref:
-        raise RuntimeError("Card statement reference is required.")
+    statement_ref = (statement_reference or "").strip() or None
     actor = (reconciled_by or "").strip() or None
     timestamp = _get_local_timestamp()
     try:
         with get_connection(db_path) as connection:
+            report_no = (report_number or "").strip() or _generate_cc_reconcile_report_no(
+                connection
+            )
             for req_id in requisition_ids:
                 cursor = connection.execute(
                     """
@@ -2734,13 +2771,15 @@ def mark_cc_reconciled(
                     """
                     UPDATE requisitions
                     SET cc_statement_reference = ?,
+                        cc_reconcile_report_no = ?,
                         cc_reconciled_at = ?,
                         cc_reconciled_by = ?,
                         updated_at = ?
                     WHERE id = ? AND is_active = 1 AND status = 'paid_cc'
                     """,
-                    (statement_ref, timestamp, actor, timestamp, req_id),
+                    (statement_ref, report_no, timestamp, actor, timestamp, req_id),
                 )
+            return report_no
     except sqlite3.Error as error:
         message = f"Failed to reconcile credit card fills: {error}"
         raise RuntimeError(message) from error
@@ -2854,6 +2893,77 @@ def update_requisition_billed(
             )
     except sqlite3.Error as error:
         message = f"Failed to mark billed requisition {requisition_id}: {error}"
+        raise RuntimeError(message) from error
+
+
+def update_billed_invoice_number(
+    db_path: str, requisition_id: int, invoice_number: str
+) -> None:
+    """
+    Change billing reference on a billed requisition (status stays billed).
+
+    Args:
+        db_path: Database path.
+        requisition_id: Requisition ID.
+        invoice_number: New vendor billing reference (non-empty).
+
+    Raises:
+        RuntimeError: If update fails or row is not billed.
+    """
+    invoice_num = (invoice_number or "").strip()
+    if not invoice_num:
+        raise RuntimeError("Billing reference is required.")
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE requisitions
+                SET invoice_number = ?,
+                    updated_at = ?
+                WHERE id = ? AND is_active = 1 AND status = 'billed'
+                """,
+                (invoice_num, timestamp, requisition_id),
+            )
+            if cursor.rowcount == 0:
+                raise RuntimeError(
+                    f"Requisition {requisition_id} is not billed or was not found."
+                )
+    except sqlite3.Error as error:
+        message = f"Failed to update billing reference for requisition {requisition_id}: {error}"
+        raise RuntimeError(message) from error
+
+
+def unbill_requisition(db_path: str, requisition_id: int) -> None:
+    """
+    Remove a requisition from billing: status back to received, clear invoice.
+
+    Args:
+        db_path: Database path.
+        requisition_id: Requisition ID.
+
+    Raises:
+        RuntimeError: If row is not billed or update fails.
+    """
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE requisitions
+                SET status = 'received',
+                    invoice_number = NULL,
+                    updated_at = ?
+                WHERE id = ? AND is_active = 1 AND status = 'billed'
+                """,
+                (timestamp, requisition_id),
+            )
+            if cursor.rowcount == 0:
+                raise RuntimeError(
+                    f"Requisition {requisition_id} is not billed or was not found."
+                )
+    except sqlite3.Error as error:
+        message = f"Failed to unbill requisition {requisition_id}: {error}"
         raise RuntimeError(message) from error
 
 

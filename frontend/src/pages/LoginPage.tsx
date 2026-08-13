@@ -34,7 +34,7 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <h1>Fuel Requisition System</h1>
+        <h1>Fleet Management System</h1>
         <p className="subtitle">Sign in to continue</p>
         <form onSubmit={handleSubmit}>
           <label htmlFor="username">Username</label>

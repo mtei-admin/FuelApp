@@ -1,15 +1,20 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
+import { PortalLayout } from "./components/layout/PortalLayout";
 import { AuthProvider } from "./context/AuthContext";
 import { ApprovalsPage } from "./pages/ApprovalsPage";
 import { BillingLayout } from "./pages/billing/BillingLayout";
 import { BillingInvoicesPage } from "./pages/billing/BillingInvoicesPage";
+import { BillingBilledPage } from "./pages/billing/BillingBilledPage";
 import { BillingCcReconciliationPage } from "./pages/billing/BillingCcReconciliationPage";
 import { AuditLayout } from "./pages/audit/AuditLayout";
 import { TransactionLogsPage } from "./pages/audit/TransactionLogsPage";
 import { ActiveUsersPage } from "./pages/ActiveUsersPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { HomePage } from "./pages/HomePage";
+import { FuelHomePage } from "./pages/FuelHomePage";
+import { PortalHomePage } from "./pages/PortalHomePage";
+import { ComingSoonModulePage } from "./pages/fleet/ComingSoonModulePage";
+import { VehiclesModulePage } from "./pages/fleet/VehiclesModulePage";
 import { LoginPage } from "./pages/LoginPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { PurchasingLayout } from "./pages/purchasing/PurchasingLayout";
@@ -33,8 +38,58 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
+            <Route element={<PortalLayout />}>
+              <Route path="/" element={<PortalHomePage />} />
+              <Route
+                path="/fleet/vehicles"
+                element={
+                  <RoleRoute
+                    allowedRoles={["approver", "purchaser", "accounting", "superuser"]}
+                  >
+                    <VehiclesModulePage />
+                  </RoleRoute>
+                }
+              />
+              <Route
+                path="/fleet/registrations"
+                element={
+                  <ComingSoonModulePage
+                    title="Registrations / Renewal"
+                    description="OR/CR renewals, LTO dates, and expiry alerts."
+                  />
+                }
+              />
+              <Route
+                path="/fleet/pms"
+                element={
+                  <ComingSoonModulePage
+                    title="PMS"
+                    description="Preventive maintenance schedules and due work."
+                  />
+                }
+              />
+              <Route
+                path="/fleet/repairs"
+                element={
+                  <ComingSoonModulePage
+                    title="Repairs"
+                    description="Work orders, shops, and repair costs."
+                  />
+                }
+              />
+              <Route
+                path="/fleet/insurance"
+                element={
+                  <ComingSoonModulePage
+                    title="Insurance"
+                    description="Policies, expiry tracking, and claims."
+                  />
+                }
+              />
+            </Route>
+
             <Route element={<AppLayout />}>
-              <Route path="/" element={<HomePage />} />
+              <Route path="/fuel" element={<FuelHomePage />} />
               <Route path="/requests" element={<RequestsPage />} />
               <Route
                 path="/encode"
@@ -88,12 +143,13 @@ export default function App() {
               >
                 <Route index element={<Navigate to="invoices" replace />} />
                 <Route path="invoices" element={<BillingInvoicesPage />} />
+                <Route path="billed" element={<BillingBilledPage />} />
                 <Route path="cc-reconciliation" element={<BillingCcReconciliationPage />} />
               </Route>
               <Route
                 path="/reports"
                 element={
-                  <RoleRoute allowedRoles={["accounting", "superuser"]}>
+                  <RoleRoute allowedRoles={["purchaser", "accounting", "superuser"]}>
                     <ReportsPage />
                   </RoleRoute>
                 }

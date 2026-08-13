@@ -5,10 +5,12 @@ pydantic
 # Streamlit app (existing)
 streamlit
 pandas
+openpyxl
 xhtml2pdf
 jinja2
 bcrypt
 pytest
 plotly
 python-dotenv
+Pillow
 

@@ -1,6 +1,6 @@
 """PDF generation utilities for purchase orders and reports."""
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from jinja2 import Template
 from xhtml2pdf import pisa
@@ -238,7 +238,7 @@ PO_TEMPLATE = Template(
             <table class="supplier-table">
                 <tr>
                     <td><span class="supplier-label">Supplier:</span> {{ vendor_name or "" }}</td>
-                    <td class="right"><span class="supplier-label">PO No.:</span> {{ po_reference or "" }} | {{ serial_number or "" }}</td>
+                    <td class="right"><span class="supplier-label">PO No.:</span> {{ po_reference or "" }}</td>
                 </tr>
                 <tr>
                     <td><span class="supplier-label">Address:</span> {{ vendor_address or "" }}</td>
@@ -436,6 +436,7 @@ BILLED_SUMMARY_TEMPLATE = Template(
     <body>
         <h1>BILLED PO SUMMARY</h1>
         <div class="meta">
+            <div><strong>Vendor:</strong> {{ vendor_name or "N/A" }}</div>
             <div><strong>Invoice #:</strong> {{ invoice_number or "N/A" }}</div>
             <div><strong>Billing Date:</strong> {{ billing_date or "" }}</div>
             <div><strong>Item Count:</strong> {{ items|length }}</div>
@@ -443,10 +444,8 @@ BILLED_SUMMARY_TEMPLATE = Template(
         <table>
             <thead>
                 <tr>
-                    <th class="center">Serial #</th>
-                    <th class="center">PO Ref</th>
+                    <th class="center">PO No.</th>
                     <th class="center">Plate</th>
-                    <th>Vendor</th>
                     <th class="center">Qty</th>
                     <th class="center">Actual Qty</th>
                     <th class="right">Unit Price</th>
@@ -456,10 +455,8 @@ BILLED_SUMMARY_TEMPLATE = Template(
             <tbody>
                 {% for item in items %}
                 <tr>
-                    <td class="center">{{ item.serial_number or "" }}</td>
                     <td class="center">{{ item.po_reference or "" }}</td>
                     <td class="center">{{ item.plate_number or "" }}</td>
-                    <td>{{ item.vendor_name or "" }}</td>
                     <td class="center">
                         {% if item.unit and item.unit.upper() == "FULLTANK" %}
                             Full Tank
@@ -501,6 +498,31 @@ BILLED_SUMMARY_TEMPLATE = Template(
 )
 
 
+def _billed_summary_vendor_label(items: List[Dict[str, Any]]) -> str:
+    """
+    Build a header vendor label from billed items (unique names, A–Z).
+
+    Args:
+        items: Requisition dicts that may include vendor_name.
+
+    Returns:
+        Single vendor name, comma-separated list, or empty string.
+    """
+    names: List[str] = []
+    seen = set()
+    for item in items:
+        name = (item.get("vendor_name") or "").strip()
+        if not name:
+            continue
+        key = name.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        names.append(name)
+    names.sort(key=str.casefold)
+    return ", ".join(names)
+
+
 def generate_billed_summary_pdf(context: Dict[str, Any]) -> bytes:
     """
     Generate a PDF summary for a batch of billed POs.
@@ -510,6 +532,7 @@ def generate_billed_summary_pdf(context: Dict[str, Any]) -> bytes:
             - invoice_number: Invoice number string (optional).
             - billing_date: Human-readable billing date string.
             - items: List of requisition dicts from list_requisitions_by_status.
+            - vendor_name: Optional override for header Vendor line.
 
     Returns:
         PDF bytes suitable for download or storage.
@@ -523,15 +546,175 @@ def generate_billed_summary_pdf(context: Dict[str, Any]) -> bytes:
         except (TypeError, ValueError):
             continue
 
+    vendor_name = (context.get("vendor_name") or "").strip()
+    if not vendor_name:
+        vendor_name = _billed_summary_vendor_label(items)
+
     html = BILLED_SUMMARY_TEMPLATE.render(
         invoice_number=context.get("invoice_number") or "",
         billing_date=context.get("billing_date") or "",
+        vendor_name=vendor_name,
         items=items,
         grand_total=grand_total,
     )
     result = pisa.pisaDocument(src=html, dest=None, link_callback=None, encoding="UTF-8")
     if result.err:
         raise RuntimeError("Failed to generate billed summary PDF.")
+    return result.dest.getvalue()
+
+
+CC_RECONCILE_SUMMARY_TEMPLATE = Template(
+    """
+    <html>
+    <head>
+        <style>
+            @page {
+                size: letter;
+                margin: 0.5in;
+            }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 11px;
+                margin: 0;
+                padding: 0;
+            }
+            h1 {
+                font-size: 18px;
+                text-align: center;
+                margin-bottom: 10px;
+            }
+            .meta {
+                margin-bottom: 10px;
+            }
+            .meta div {
+                margin-bottom: 2px;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+            }
+            th, td {
+                border: 1px solid #000;
+                padding: 4px;
+                font-size: 10px;
+            }
+            th {
+                background-color: #f0f0f0;
+            }
+            .right {
+                text-align: right;
+            }
+            .center {
+                text-align: center;
+            }
+            .total-row {
+                margin-top: 8px;
+                text-align: right;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>CC RECONCILIATION SUMMARY</h1>
+        <div class="meta">
+            <div><strong>Report No.:</strong> {{ report_number or "N/A" }}</div>
+            <div><strong>Vendor:</strong> {{ vendor_name or "N/A" }}</div>
+            <div><strong>Statement Ref:</strong> {{ statement_reference or "—" }}</div>
+            <div><strong>Reconciled Date:</strong> {{ reconciled_date or "" }}</div>
+            <div><strong>Item Count:</strong> {{ items|length }}</div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th class="center">Request #</th>
+                    <th class="center">Plate</th>
+                    <th class="center">Receipt #</th>
+                    <th class="center">Card Ref</th>
+                    <th class="center">Qty</th>
+                    <th class="right">Unit Price</th>
+                    <th class="right">Line Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="center">{{ item.serial_number or "" }}</td>
+                    <td class="center">{{ item.plate_number or "" }}</td>
+                    <td class="center">{{ item.receipt_number or "" }}</td>
+                    <td class="center">{{ item.cc_card_reference or "" }}</td>
+                    <td class="center">
+                        {% if item.unit and item.unit.upper() == "FULLTANK" %}
+                            Full Tank
+                        {% elif item.actual_quantity %}
+                            {{ item.actual_quantity }}
+                        {% else %}
+                            {{ item.quantity or "" }}
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        {% if item.actual_unit_price %}
+                            Php{{ "%.2f"|format(item.actual_unit_price) }}
+                        {% elif item.unit_price %}
+                            Php{{ "%.2f"|format(item.unit_price) }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="right">
+                        {% if item.total_price %}
+                            Php{{ "%.2f"|format(item.total_price) }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="total-row">
+            GRAND TOTAL: Php{{ "%.2f"|format(grand_total) }}
+        </div>
+    </body>
+    </html>
+    """
+)
+
+
+def generate_cc_reconcile_summary_pdf(context: Dict[str, Any]) -> bytes:
+    """
+    Generate a PDF summary for a just-reconciled credit card batch.
+
+    Args:
+        context: Keys statement_reference, reconciled_date, items; optional vendor_name.
+
+    Returns:
+        PDF bytes.
+    """
+    items: List[Dict[str, Any]] = context.get("items") or []
+    grand_total = 0.0
+    for item in items:
+        total_price = item.get("total_price") or 0.0
+        try:
+            grand_total += float(total_price)
+        except (TypeError, ValueError):
+            continue
+
+    vendor_name = (context.get("vendor_name") or "").strip()
+    if not vendor_name:
+        vendor_name = _billed_summary_vendor_label(items)
+
+    html = CC_RECONCILE_SUMMARY_TEMPLATE.render(
+        report_number=context.get("report_number") or "",
+        statement_reference=context.get("statement_reference") or "",
+        reconciled_date=context.get("reconciled_date") or "",
+        vendor_name=vendor_name,
+        items=items,
+        grand_total=grand_total,
+    )
+    result = pisa.pisaDocument(src=html, dest=None, link_callback=None, encoding="UTF-8")
+    if result.err:
+        raise RuntimeError("Failed to generate CC reconciliation summary PDF.")
     return result.dest.getvalue()
 
 
@@ -543,7 +726,9 @@ REPORT_PDF_TEMPLATE = Template(
             @page { size: letter; margin: 0.4in; }
             body { font-family: Arial, sans-serif; font-size: 8px; margin: 0; padding: 0; }
             h1 { font-size: 14px; text-align: center; margin: 0 0 4px 0; }
-            table { width: 100%; border-collapse: collapse; margin-top: 4px; table-layout: fixed; }
+            h2 { font-size: 11px; margin: 10px 0 4px 0; }
+            h3 { font-size: 9px; margin: 6px 0 3px 0; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 2px; table-layout: fixed; }
             th, td { border: 1px solid #000; padding: 2px; overflow: hidden; word-wrap: break-word; }
             th { background-color: #f0f0f0; }
             .col-serial { width: 5%; }
@@ -557,15 +742,94 @@ REPORT_PDF_TEMPLATE = Template(
             .col-po { width: 14%; }
             .col-inv { width: 13%; }
             .right { text-align: right; }
-            .total-row { margin-top: 4px; text-align: right; font-weight: bold; font-size: 9px; }
+            .subtotal-row td { background-color: #f7f7f7; font-weight: bold; }
+            .group-total { margin: 2px 0 6px 0; text-align: right; font-weight: bold; font-size: 9px; }
+            .total-row { margin-top: 8px; text-align: right; font-weight: bold; font-size: 9px; }
         </style>
     </head>
     <body>
         <h1>Fuel Requisition Report</h1>
+        {% if groups %}
+            {% for group in groups %}
+            <h2>{{ group.label }} ({{ group.count }}) — Total: Php{{ "%.2f"|format(group.total) }}</h2>
+            {% if group.subgroups %}
+                {% for sub in group.subgroups %}
+                <h3>Billing Ref: {{ sub.label }} ({{ sub.count }}) — Subtotal: Php{{ "%.2f"|format(sub.total) }}</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-serial">PO No.</th>
+                            <th class="col-date">Date</th>
+                            <th class="col-plate">Plate</th>
+                            <th class="col-qty">Qty</th>
+                            <th class="col-unit">Unit</th>
+                            <th class="col-total right">Total</th>
+                            <th class="col-vendor">Vendor</th>
+                            <th class="col-status">Status</th>
+                            <th class="col-inv">Invoice #</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in sub.rows %}
+                        <tr>
+                            <td class="col-serial">{{ row.po_reference or "" }}</td>
+                            <td class="col-date">{{ row.created_at_display or "" }}</td>
+                            <td class="col-plate">{{ row.plate_number or "" }}</td>
+                            <td class="col-qty">{{ row.qty_display }}</td>
+                            <td class="col-unit">{{ row.unit_display }}</td>
+                            <td class="col-total right">{{ row.total_display }}</td>
+                            <td class="col-vendor">{{ row.vendor_name or "" }}</td>
+                            <td class="col-status">{{ row.status or "" }}</td>
+                            <td class="col-inv">{{ row.invoice_number or "" }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="subtotal-row">
+                            <td colspan="5" class="right">Subtotal ({{ sub.label }})</td>
+                            <td class="col-total right">Php{{ "%.2f"|format(sub.total) }}</td>
+                            <td colspan="3"></td>
+                        </tr>
+                    </tbody>
+                </table>
+                {% endfor %}
+            {% else %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="col-serial">PO No.</th>
+                            <th class="col-date">Date</th>
+                            <th class="col-plate">Plate</th>
+                            <th class="col-qty">Qty</th>
+                            <th class="col-unit">Unit</th>
+                            <th class="col-total right">Total</th>
+                            <th class="col-vendor">Vendor</th>
+                            <th class="col-status">Status</th>
+                            <th class="col-inv">Invoice #</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in group.rows %}
+                        <tr>
+                            <td class="col-serial">{{ row.po_reference or "" }}</td>
+                            <td class="col-date">{{ row.created_at_display or "" }}</td>
+                            <td class="col-plate">{{ row.plate_number or "" }}</td>
+                            <td class="col-qty">{{ row.qty_display }}</td>
+                            <td class="col-unit">{{ row.unit_display }}</td>
+                            <td class="col-total right">{{ row.total_display }}</td>
+                            <td class="col-vendor">{{ row.vendor_name or "" }}</td>
+                            <td class="col-status">{{ row.status or "" }}</td>
+                            <td class="col-inv">{{ row.invoice_number or "" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+            <div class="group-total">{{ group.label }} Total: Php{{ "%.2f"|format(group.total) }}</div>
+            {% endfor %}
+        {% else %}
         <table>
             <thead>
                 <tr>
-                    <th class="col-serial">Serial #</th>
+                    <th class="col-serial">PO No.</th>
                     <th class="col-date">Date</th>
                     <th class="col-plate">Plate</th>
                     <th class="col-qty">Qty</th>
@@ -573,14 +837,13 @@ REPORT_PDF_TEMPLATE = Template(
                     <th class="col-total right">Total</th>
                     <th class="col-vendor">Vendor</th>
                     <th class="col-status">Status</th>
-                    <th class="col-po">PO Ref</th>
                     <th class="col-inv">Invoice #</th>
                 </tr>
             </thead>
             <tbody>
                 {% for row in rows %}
                 <tr>
-                    <td class="col-serial">{{ row.serial_number or "" }}</td>
+                    <td class="col-serial">{{ row.po_reference or "" }}</td>
                     <td class="col-date">{{ row.created_at_display or "" }}</td>
                     <td class="col-plate">{{ row.plate_number or "" }}</td>
                     <td class="col-qty">{{ row.qty_display }}</td>
@@ -588,12 +851,12 @@ REPORT_PDF_TEMPLATE = Template(
                     <td class="col-total right">{{ row.total_display }}</td>
                     <td class="col-vendor">{{ row.vendor_name or "" }}</td>
                     <td class="col-status">{{ row.status or "" }}</td>
-                    <td class="col-po">{{ row.po_reference or "" }}</td>
                     <td class="col-inv">{{ row.invoice_number or "" }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        {% endif %}
         <div class="total-row">Grand Total: Php{{ "%.2f"|format(grand_total) }}</div>
     </body>
     </html>
@@ -601,19 +864,83 @@ REPORT_PDF_TEMPLATE = Template(
 )
 
 
-def generate_report_pdf(rows: List[Dict[str, Any]], grand_total: float = 0.0) -> bytes:
+def _normalize_report_row(r: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize a requisition row for report PDF display fields."""
+    unit = (r.get("unit") or "").strip().upper()
+    if unit == "FULLTANK":
+        qty_display = "Full Tank"
+        unit_display = "FULLTANK"
+    else:
+        qty_display = r.get("quantity") or ""
+        unit_display = (r.get("unit") or "liters").strip()
+    tp = r.get("total_price")
+    total_display = f"Php{float(tp):,.2f}" if tp is not None else "—"
+    raw_created = r.get("created_at") or ""
+    created_at_display = raw_created[:10] if len(raw_created) >= 10 else raw_created
+    return {
+        "serial_number": r.get("serial_number"),
+        "created_at_display": created_at_display,
+        "plate_number": r.get("plate_number"),
+        "qty_display": qty_display,
+        "unit_display": unit_display,
+        "total_display": total_display,
+        "vendor_name": r.get("vendor_name"),
+        "status": r.get("status"),
+        "po_reference": r.get("po_reference"),
+        "invoice_number": r.get("invoice_number"),
+    }
+
+
+def generate_report_pdf(
+    rows: List[Dict[str, Any]],
+    grand_total: float = 0.0,
+    groups: Optional[List[Dict[str, Any]]] = None,
+) -> bytes:
     """
     Generate a PDF report from requisition rows (filtered report data).
 
     Args:
         rows: List of requisition dicts (e.g. from Reports filtered list).
         grand_total: Grand total amount to show at bottom.
+        groups: Optional status groups (with optional Billed subgroups) for
+            nested section headers and billing-reference subtotals.
 
     Returns:
         PDF bytes.
     """
-    if not rows:
-        html = REPORT_PDF_TEMPLATE.render(rows=[], grand_total=0.0)
+    if groups:
+        normalized_groups: List[Dict[str, Any]] = []
+        for group in groups:
+            if not group.get("rows") and not group.get("subgroups"):
+                continue
+            payload: Dict[str, Any] = {
+                "label": group.get("label") or "",
+                "count": int(group.get("count") or 0),
+                "total": float(group.get("total") or 0),
+                "rows": [_normalize_report_row(r) for r in (group.get("rows") or [])],
+            }
+            subgroups = group.get("subgroups") or []
+            if subgroups:
+                payload["subgroups"] = [
+                    {
+                        "label": sub.get("label") or "",
+                        "count": int(sub.get("count") or 0),
+                        "total": float(sub.get("total") or 0),
+                        "rows": [_normalize_report_row(r) for r in (sub.get("rows") or [])],
+                    }
+                    for sub in subgroups
+                ]
+            normalized_groups.append(payload)
+        if not normalized_groups:
+            html = REPORT_PDF_TEMPLATE.render(rows=[], groups=[], grand_total=0.0)
+        else:
+            html = REPORT_PDF_TEMPLATE.render(
+                rows=[],
+                groups=normalized_groups,
+                grand_total=grand_total,
+            )
+    elif not rows:
+        html = REPORT_PDF_TEMPLATE.render(rows=[], groups=[], grand_total=0.0)
     else:
         total = 0.0
         for r in rows:
@@ -623,32 +950,8 @@ def generate_report_pdf(rows: List[Dict[str, Any]], grand_total: float = 0.0) ->
                 pass
         if grand_total <= 0:
             grand_total = total
-        normalized = []
-        for r in rows:
-            unit = (r.get("unit") or "").strip().upper()
-            if unit == "FULLTANK":
-                qty_display = "Full Tank"
-                unit_display = "FULLTANK"
-            else:
-                qty_display = r.get("quantity") or ""
-                unit_display = (r.get("unit") or "liters").strip()
-            tp = r.get("total_price")
-            total_display = f"Php{float(tp):,.2f}" if tp is not None else "—"
-            raw_created = r.get("created_at") or ""
-            created_at_display = raw_created[:10] if len(raw_created) >= 10 else raw_created
-            normalized.append({
-                "serial_number": r.get("serial_number"),
-                "created_at_display": created_at_display,
-                "plate_number": r.get("plate_number"),
-                "qty_display": qty_display,
-                "unit_display": unit_display,
-                "total_display": total_display,
-                "vendor_name": r.get("vendor_name"),
-                "status": r.get("status"),
-                "po_reference": r.get("po_reference"),
-                "invoice_number": r.get("invoice_number"),
-            })
-        html = REPORT_PDF_TEMPLATE.render(rows=normalized, grand_total=grand_total)
+        normalized = [_normalize_report_row(r) for r in rows]
+        html = REPORT_PDF_TEMPLATE.render(rows=normalized, groups=[], grand_total=grand_total)
     result = pisa.pisaDocument(src=html, dest=None, link_callback=None, encoding="UTF-8")
     if result.err:
         raise RuntimeError("Failed to generate report PDF.")

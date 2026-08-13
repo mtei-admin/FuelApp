@@ -12,7 +12,7 @@ router = APIRouter(prefix="/reports", tags=["reports"])
 
 ReportsUser = Annotated[
     dict,
-    Depends(require_roles("accounting", "superuser")),
+    Depends(require_roles("purchaser", "accounting", "superuser")),
 ]
 
 
@@ -83,7 +83,10 @@ def export_pdf(
     """Download filtered report as PDF."""
     report = _build(db_path, plate, vendor, from_date, to_date, status_filter)
     pdf_bytes = pdf_service.build_report_pdf_bytes(
-        db_path, report["rows"], report["grand_total"]
+        db_path,
+        report["rows"],
+        report["grand_total"],
+        groups=report.get("groups"),
     )
     return Response(
         content=pdf_bytes,

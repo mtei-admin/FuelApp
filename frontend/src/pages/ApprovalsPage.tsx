@@ -238,17 +238,17 @@ export function ApprovalsPage() {
                       >
                         History
                       </button>
+                      {isSuperuser && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setAdminEditing(req)}
+                        >
+                          Admin Edit
+                        </button>
+                      )}
                       {canApprove ? (
                         <>
-                          {isSuperuser && (
-                            <button
-                              type="button"
-                              className="secondary"
-                              onClick={() => setAdminEditing(req)}
-                            >
-                              Admin Edit
-                            </button>
-                          )}
                           <button type="button" onClick={() => setEditing(req)}>
                             Edit
                           </button>
@@ -264,7 +264,7 @@ export function ApprovalsPage() {
                           </button>
                         </>
                       ) : (
-                        <span className="muted">View only</span>
+                        !isSuperuser && <span className="muted">View only</span>
                       )}
                     </td>
                   </tr>
@@ -303,17 +303,17 @@ export function ApprovalsPage() {
                   >
                     History
                   </button>
+                  {isSuperuser && (
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setAdminEditing(req)}
+                    >
+                      Admin Edit
+                    </button>
+                  )}
                   {canApprove && (
                     <>
-                      {isSuperuser && (
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => setAdminEditing(req)}
-                        >
-                          Admin Edit
-                        </button>
-                      )}
                       <button type="button" onClick={() => setEditing(req)}>
                         Edit
                       </button>

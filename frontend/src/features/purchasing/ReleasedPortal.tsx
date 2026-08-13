@@ -67,7 +67,7 @@ export function ReleasedPortal({
                       className="secondary"
                       onClick={() => onAdminEdit(req)}
                     >
-                      Edit
+                      Admin Edit
                     </button>
                   </>
                 )}

@@ -62,6 +62,49 @@ def _filter_by_date_range(
     return out
 
 
+NO_BILLING_REF_LABEL = "— No billing reference"
+
+
+def _billing_ref_label(row: Dict[str, Any]) -> str:
+    """Display label for vendor billing reference (invoice_number)."""
+    ref = (row.get("invoice_number") or "").strip()
+    return ref or NO_BILLING_REF_LABEL
+
+
+def _group_billed_by_reference(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Nest billed rows by billing reference with count and total per reference.
+
+    Empty references sort last under NO_BILLING_REF_LABEL.
+    """
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+    for row in data:
+        key = _billing_ref_label(row)
+        buckets.setdefault(key, []).append(row)
+
+    def sort_key(label: str) -> tuple:
+        if label == NO_BILLING_REF_LABEL:
+            return (1, "")
+        return (0, label.upper())
+
+    subgroups: List[Dict[str, Any]] = []
+    for label in sorted(buckets.keys(), key=sort_key):
+        rows = sorted(
+            buckets[label],
+            key=lambda x: str(x.get("po_reference") or x.get("serial_number") or ""),
+        )
+        subgroups.append(
+            {
+                "label": label,
+                "invoice_number": None if label == NO_BILLING_REF_LABEL else label,
+                "count": len(rows),
+                "total": sum(float(row.get("total_price") or 0) for row in rows),
+                "rows": rows,
+            }
+        )
+    return subgroups
+
+
 def build_report(
     db_path: str,
     plate_filter: str = "",
@@ -112,25 +155,25 @@ def build_report(
             ]
         data = _filter_by_date_range(data, from_date, to_date)
 
+        subgroups: Optional[List[Dict[str, Any]]] = None
         if label == "Billed":
-            data = sorted(
-                data,
-                key=lambda x: (
-                    (x.get("invoice_number") or "").strip().upper() or "ZZZZZZZZZZ"
-                ),
-            )
+            subgroups = _group_billed_by_reference(data)
+            data = [row for sub in subgroups for row in sub["rows"]]
 
         group_total = sum(float(row.get("total_price") or 0) for row in data)
         grand_total += group_total
         for row in data:
             all_rows.append({**row, "status_group": label})
 
-        groups.append({
+        group_payload: Dict[str, Any] = {
             "label": label,
             "count": len(data),
             "total": group_total,
             "rows": data,
-        })
+        }
+        if subgroups is not None:
+            group_payload["subgroups"] = subgroups
+        groups.append(group_payload)
 
     return {
         "groups": groups,
@@ -146,8 +189,8 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([
-        "Serial #", "Plate", "Quantity", "Unit", "Total Price", "Vendor",
-        "Status", "Status Group", "Payment", "PO Ref", "Invoice #", "CC Stmt #",
+        "PO No.", "Plate", "Quantity", "Unit", "Total Price", "Vendor",
+        "Status", "Status Group", "Payment", "Invoice #", "CC Stmt #",
         "Requested By", "Created",
     ])
     for row in rows:
@@ -158,7 +201,7 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
             unit = "FULLTANK"
         payment = _payment_label(row)
         writer.writerow([
-            row.get("serial_number") or "",
+            row.get("po_reference") or "",
             row.get("plate_number") or "",
             qty,
             unit,
@@ -167,7 +210,6 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
             row.get("status") or "",
             row.get("status_group") or "",
             payment,
-            row.get("po_reference") or "",
             row.get("invoice_number") or "",
             row.get("cc_statement_reference") or "",
             row.get("requester_name") or "",

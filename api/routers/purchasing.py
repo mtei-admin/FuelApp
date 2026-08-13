@@ -76,6 +76,7 @@ class AdminEditRequest(BaseModel):
     settlement_type: Optional[str] = None
     cc_card_reference: Optional[str] = None
     cc_statement_reference: Optional[str] = None
+    cc_reconcile_report_no: Optional[str] = None
     cc_reconciled_at: Optional[str] = None
     cc_reconciled_by: Optional[str] = None
     cancel_reason: Optional[str] = None

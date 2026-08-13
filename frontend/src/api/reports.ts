@@ -21,11 +21,21 @@ export interface ReportFilters {
   status?: string;
 }
 
+export interface ReportSubgroup {
+  label: string;
+  invoice_number?: string | null;
+  count: number;
+  total: number;
+  rows: Record<string, unknown>[];
+}
+
 export interface ReportGroup {
   label: string;
   count: number;
   total: number;
   rows: Record<string, unknown>[];
+  /** Present for Billed: nested by vendor billing reference. */
+  subgroups?: ReportSubgroup[];
 }
 
 export interface ReportSummary {

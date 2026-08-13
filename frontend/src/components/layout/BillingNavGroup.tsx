@@ -3,12 +3,17 @@ import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useBillingCounts } from "../../hooks/useBillingCounts";
 
-const SUB_ITEMS = [
-  { to: "/billing/invoices", label: "Vendor Invoices", countKey: "received" as const },
+const SUB_ITEMS: Array<{
+  to: string;
+  label: string;
+  countKey: "received" | "cc_unreconciled" | null;
+}> = [
+  { to: "/billing/invoices", label: "Vendor Invoices", countKey: "received" },
+  { to: "/billing/billed", label: "Billed (Corrections)", countKey: null },
   {
     to: "/billing/cc-reconciliation",
     label: "CC Reconciliation",
-    countKey: "cc_unreconciled" as const,
+    countKey: "cc_unreconciled",
   },
 ];
 
@@ -55,7 +60,7 @@ export function BillingNavGroup() {
               className={({ isActive }) => (isActive ? "active" : "")}
             >
               {item.label}
-              {counts[item.countKey] > 0 && (
+              {item.countKey && counts[item.countKey] > 0 && (
                 <span className="badge">{counts[item.countKey]}</span>
               )}
             </NavLink>

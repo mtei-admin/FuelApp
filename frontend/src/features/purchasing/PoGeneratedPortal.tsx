@@ -57,7 +57,7 @@ export function PoGeneratedPortal({
                 </button>
                 {isSuperuser && (
                   <button type="button" className="secondary" onClick={() => onAdminEdit(req)}>
-                    Edit
+                    Admin Edit
                   </button>
                 )}
               </td>

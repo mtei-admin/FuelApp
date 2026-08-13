@@ -106,14 +106,22 @@ STEP 5 — Configure .env for HTTPS URL
   Configure SMTP settings for Forgot Password (see SMTP_SETUP.txt).
 
 ================================================================================
-STEP 6 — PWA icons (optional)
+STEP 6 — PWA icons / site favicon
 ================================================================================
 
-  Add to pwa\icons\:
-    icon-192x192.png
-    icon-512x512.png
+  Site tab icons (built into frontend/dist via Vite public/):
+    frontend/public/favicon.ico
+    frontend/public/favicon-32x32.png
+    frontend/public/apple-touch-icon.png
 
-  Resize assets\mte_logo.png to 192x192 and 512x512.
+  PWA home-screen icons (IIS serves /icons/* from pwa/icons/):
+    pwa/icons/icon-192x192.png
+    pwa/icons/icon-512x512.png
+
+  Regenerate from assets/mte_logo.png:
+    python deploy/generate_site_icons.py
+    deploy\build_frontend.bat
+
 
 ================================================================================
 STEP 7 — Verify deployment

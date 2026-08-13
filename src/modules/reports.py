@@ -24,7 +24,7 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
     if not current_user:
         st.error("User context missing.")
         return
-    if current_user.get("role", "").lower() not in {"accounting", "superuser"}:
+    if current_user.get("role", "").lower() not in {"purchaser", "accounting", "superuser"}:
         st.error("You do not have permission to view reports.")
         return
 
@@ -143,7 +143,7 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
                 st.write("No records.")
                 continue
             for row in data:
-                serial_num = row.get("serial_number", "—")
+                po_num = row.get("po_reference") or "—"
                 price_str = f" | ₱{row['total_price']:,.2f}" if row.get("total_price") else ""
                 qty_text = (
                     "Full Tank"
@@ -151,9 +151,9 @@ def render(db_path: Optional[str] = None, current_user: Optional[Dict[str, str]]
                     else f"{row['quantity']} liters"
                 )
                 st.write(
-                    f"- **{serial_num}** | {row['plate_number']} | {qty_text}{price_str} | "
+                    f"- **{po_num}** | {row['plate_number']} | {qty_text}{price_str} | "
                     f"{row.get('vendor_name') or '—'} | status: {row['status']} | "
-                    f"PO: {row.get('po_reference') or '—'} | Invoice: {row.get('invoice_number') or '—'}"
+                    f"Invoice: {row.get('invoice_number') or '—'}"
                 )
 
     st.divider()
@@ -192,7 +192,7 @@ def _build_report_csv(rows: List[Dict]) -> bytes:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([
-        "Serial #",
+        "PO No.",
         "Plate",
         "Quantity",
         "Unit",
@@ -200,7 +200,6 @@ def _build_report_csv(rows: List[Dict]) -> bytes:
         "Vendor",
         "Status",
         "Status Group",
-        "PO Ref",
         "Invoice #",
         "Requested By",
         "Created",
@@ -212,7 +211,7 @@ def _build_report_csv(rows: List[Dict]) -> bytes:
             qty = "Full Tank"
             unit = "FULLTANK"
         writer.writerow([
-            row.get("serial_number") or "",
+            row.get("po_reference") or "",
             row.get("plate_number") or "",
             qty,
             unit,
@@ -220,7 +219,6 @@ def _build_report_csv(rows: List[Dict]) -> bytes:
             row.get("vendor_name") or "",
             row.get("status") or "",
             row.get("status_group") or "",
-            row.get("po_reference") or "",
             row.get("invoice_number") or "",
             row.get("requester_name") or "",
             row.get("created_at") or "",

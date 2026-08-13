@@ -26,7 +26,10 @@ export function AppLayout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <strong>Fuel Req</strong>
+          <NavLink to="/" className="sidebar-portal-link">
+            ← Fleet
+          </NavLink>
+          <strong>Fuel</strong>
         </div>
         <div className="sidebar-identity">
           <div className="sidebar-avatar" aria-hidden="true">
@@ -38,8 +41,8 @@ export function AppLayout() {
           </div>
         </div>
         <nav className="sidebar-nav">
-          <NavLink to="/" end className={({ isActive }) => (isActive ? "active" : "")}>
-            Home
+          <NavLink to="/fuel" end className={({ isActive }) => (isActive ? "active" : "")}>
+            Fuel Home
           </NavLink>
           <NavLink
             to="/requests"

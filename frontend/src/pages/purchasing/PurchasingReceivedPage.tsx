@@ -46,7 +46,7 @@ export function PurchasingReceivedPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Request #</th>
+                <th>PO No.</th>
                 <th>Vehicle / Vendor</th>
                 <th>Fuel Type</th>
                 <th>Receipt #</th>
@@ -58,7 +58,7 @@ export function PurchasingReceivedPage() {
             <tbody>
               {receivedSorted.map((req) => (
                 <tr key={req.id}>
-                  <td>{req.serial_number}</td>
+                  <td>{req.po_reference ?? "—"}</td>
                   <td>
                     {req.plate_number} — {req.vendor_name}
                   </td>

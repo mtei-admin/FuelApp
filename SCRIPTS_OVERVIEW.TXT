@@ -31,7 +31,7 @@
 - api/services/billing_service.py: Billing reconciliation and mark-billed batch logic.
 - api/services/reports_service.py: Grouped report data and CSV builder.
 - api/services/dashboard_service.py: Dashboard analytics aggregation.
-- api/services/pdf_service.py: PDF generation for PO, reports, and billed summaries via src/utils/pdf_gen.py.
+- api/services/pdf_service.py: PDF/Excel generation for PO, reports, and billed summaries via pdf_gen/xlsx_gen.
 - api/routers/users.py: User enrollment and admin management (superuser only).
 - api/services/user_service.py: Wraps create/list/update user DB helpers with bcrypt hashing.
 - api/schemas/user_admin.py: Pydantic schemas for admin user CRUD.
@@ -69,6 +69,7 @@
 - frontend/: React + TypeScript SPA (auth, requests, approvals, purchasing, billing, reports, dashboard, master data).
 - deploy/setup_api.bat: One-shot API setup (deps, DB, frontend build) with start instructions.
 - deploy/build_frontend.bat: npm install and build React app to frontend/dist for production.
+- deploy/generate_site_icons.py: Build favicon/apple-touch/PWA icons from assets/mte_logo.png (Pillow).
 - deploy/run_production.bat: FastAPI on 127.0.0.1:8000 for IIS reverse proxy (SERVE_FRONTEND=false).
 - deploy/run_remote_tunnel.bat: Cloudflare Tunnel to IIS for off-site access (see REMOTE_ACCESS.TXT).
 - deploy/install_cloudflared_service.ps1: Install cloudflared Windows service (remote path auto-start).
@@ -106,6 +107,7 @@
 - src/utils/__init__.py: Package marker for utility helpers.
 - src/utils/plate.py: Plate number validate/normalize (alphanumeric only, uppercase, uniqueness key).
 - src/utils/pdf_gen.py: Purchase order PDF rendering (jinja2 + xhtml2pdf).
+- src/utils/xlsx_gen.py: Billed PO summary Excel (.xlsx) export with vendor subtotals (openpyxl).
 - frontend/src/utils/plate.ts: Client-side plate validate/normalize (match backend rules).
 - reset_serials.py: Deletes all request/PO transaction rows and sets next requisition serial + PO reference counters (default 2827 / 2787).
 - cleanup_all_transactions.py: Interactive wipe of requests, POs, fuel prices, sessions (master data kept).

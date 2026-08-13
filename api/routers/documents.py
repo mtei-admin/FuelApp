@@ -24,6 +24,15 @@ class BilledSummaryRequest(BaseModel):
     items: list
 
 
+class CcReconcileSummaryRequest(BaseModel):
+    """Context for CC reconciliation summary PDF/Excel."""
+
+    report_number: str = ""
+    statement_reference: str = ""
+    reconciled_date: str = ""
+    items: list
+
+
 @router.get("/po/{requisition_id}")
 def download_po_pdf(
     requisition_id: int,
@@ -60,11 +69,91 @@ def download_billed_summary(
         "items": payload.items,
     }
     pdf_bytes = pdf_service.build_billed_summary_pdf_bytes(context)
-    name = payload.invoice_number or "no_invoice"
+    name = pdf_service.billed_summary_download_stem(payload.invoice_number)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f"attachment; filename=Billed_PO_Summary_{name}.pdf"
+        },
+    )
+
+
+@router.post("/billed-summary-xlsx")
+def download_billed_summary_xlsx(
+    payload: BilledSummaryRequest,
+    _user: DocUser,
+) -> Response:
+    """Download billed PO summary Excel (.xlsx)."""
+    context: Dict[str, Any] = {
+        "invoice_number": payload.invoice_number,
+        "billing_date": payload.billing_date,
+        "items": payload.items,
+    }
+    try:
+        xlsx_bytes = pdf_service.build_billed_summary_xlsx_bytes(context)
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to build Excel summary: {error}",
+        ) from error
+    name = pdf_service.billed_summary_download_stem(payload.invoice_number)
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=Billed_PO_Summary_{name}.xlsx"
+        },
+    )
+
+
+@router.post("/cc-reconcile-summary")
+def download_cc_reconcile_summary(
+    payload: CcReconcileSummaryRequest,
+    _user: DocUser,
+) -> Response:
+    """Download CC reconciliation summary PDF."""
+    context: Dict[str, Any] = {
+        "report_number": payload.report_number,
+        "statement_reference": payload.statement_reference,
+        "reconciled_date": payload.reconciled_date,
+        "items": payload.items,
+    }
+    pdf_bytes = pdf_service.build_cc_reconcile_summary_pdf_bytes(context)
+    name = pdf_service.cc_reconcile_download_stem(payload.report_number)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=CC_Reconcile_Summary_{name}.pdf"
+        },
+    )
+
+
+@router.post("/cc-reconcile-summary-xlsx")
+def download_cc_reconcile_summary_xlsx(
+    payload: CcReconcileSummaryRequest,
+    _user: DocUser,
+) -> Response:
+    """Download CC reconciliation summary Excel (.xlsx)."""
+    context: Dict[str, Any] = {
+        "report_number": payload.report_number,
+        "statement_reference": payload.statement_reference,
+        "reconciled_date": payload.reconciled_date,
+        "items": payload.items,
+    }
+    try:
+        xlsx_bytes = pdf_service.build_cc_reconcile_summary_xlsx_bytes(context)
+    except Exception as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to build Excel summary: {error}",
+        ) from error
+    name = pdf_service.cc_reconcile_download_stem(payload.report_number)
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=CC_Reconcile_Summary_{name}.xlsx"
         },
     )

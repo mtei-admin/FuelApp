@@ -1,3 +1,21 @@
+2026-08-13 | Fleet | Portal landing (AttendanceHub-style cards); Vehicles module shell; Fuel enters existing app via /fuel; placeholders for Registrations/PMS/Repairs/Insurance.
+2026-08-13 | Admin | Admin Edit available on Billed (Corrections) and Reports for every status; Approvals Admin Edit not gated by approve role.
+2026-08-03 | Billing | CC Reconciliation: system Report No. (yyyymmddhhmmss); statement reference optional; stored on rows + PDF/Excel.
+2026-08-03 | Billing | CC Reconciliation: after Mark Reconciled, auto Excel + PDF/Excel summary panel (like Vendor Invoices Mark Billed).
+2026-08-03 | Billing | CC Reconciliation: show Request # again (CC fills never get a PO).
+2026-07-30 | UI | From Purchasing Received through Billing to Reports: show PO No. (po_reference) instead of Request #; CSV/PDF/Excel exports aligned.
+2026-07-30 | Purchasing | Received table: Request # column → PO No. (shows po_reference).
+2026-07-30 | Purchasing | PO PDF: show PO No. only (omit Request # / serial beside it).
+2026-07-30 | Billing | Vendor Invoices, Billed (Corrections), CC Reconciliation: groups default collapsed; CC grouped by vendor.
+2026-07-30 | Billing | Billed PO Summary PDF: Vendor moved to header (before Invoice #); Vendor column removed from table.
+2026-07-30 | Reports | Billed section: Download CSV and Download PDF on every billing-reference subgroup.
+2026-07-30 | Billing | After Mark Billed: auto-download Excel summary + manual Download Excel (.xlsx); PDF still available. POST /api/documents/billed-summary-xlsx (openpyxl).
+2026-07-27 | Roles | Purchaser can access Reports (API + React + Streamlit); Audit trail stays accounting/superuser.
+2026-07-27 | Billing | Purchaser can edit billing reference and unbill mistaken items; Billing → Billed (Corrections) page.
+2026-07-27 | Reports / Billing | Billed grouped by billing reference with totals; PDF nested subtotals; accounting can edit ref or unbill mistaken items.
+2026-07-21 | Billing | Vendor Invoices: collapsible vendor groups (expand/collapse all + per-vendor toggle).
+2026-07-21 | Billing | Vendor Invoices: group received items by vendor with select-all + subtotal per group.
+2026-07-20 | UI | Site icons: full MTE logo favicon/apple-touch + PWA 192/512; generate via deploy/generate_site_icons.py.
 2026-07-13 | Deployment | Remote access CONFIRMED: mobile via Cloudflare Tunnel (origin http://127.0.0.1:80); office IIS split-horizon unchanged.
 2026-07-13 | Deployment | Tunnel origin: use http://127.0.0.1:80 + Host header (not https://127.0.0.1:443) to fix mobile 502/Host Error.
 2026-07-13 | Deployment | REMOTE_ACCESS.TXT: full CrazyDomains→Cloudflare nameserver move checklist (copy MX/A first).

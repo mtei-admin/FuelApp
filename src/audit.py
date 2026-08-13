@@ -33,6 +33,7 @@ REQUISITION_AUDIT_FIELDS = [
     "settlement_type",
     "cc_card_reference",
     "cc_statement_reference",
+    "cc_reconcile_report_no",
     "cc_reconciled_at",
     "cc_reconciled_by",
 ]

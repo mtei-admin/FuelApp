@@ -388,7 +388,7 @@ def render_sidebar(role: str, db_path: str) -> str:
     role_pages = {
         "user": ["requests"],
         "approver": ["requests", "approvals", "master_data"],
-        "purchaser": ["requests", "approvals", "purchasing", "billing", "master_data"],
+        "purchaser": ["requests", "approvals", "purchasing", "billing", "reports", "master_data"],
         "accounting": accounting_pages,
         "superuser": all_pages,
     }

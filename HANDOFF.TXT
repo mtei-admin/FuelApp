@@ -1,4 +1,5 @@
 Current State:
+- Fleet portal: `/` is AttendanceHub-style module chooser (Vehicles, Fuel, coming-soon Registrations/PMS/Repairs/Insurance, Admin→Master Data). Fuel app lives under AppLayout with sidebar; entry `/fuel`. Vehicles module at `/fleet/vehicles` (reuses VehiclesTab).
 - Master Data: Vendors, Companies, Vehicles, Users tabs. Companies table seeded (MTEI, DSRDC, DIC, GCEIC, MTEI Trucking); vehicle/encoder use company code from DB (Option A text links). PDF logos/headers still hardcoded.
 - Vehicle plate numbers: letters, numbers, hyphen, spaces, and "&" only (reject other specials); unique; always uppercase on save (React Master Data, API, DB, Streamlit).
 - Encoder role (renamed from user): Requests (own + pending edit only); Encode menu — Released PO receipt + CC fills, filtered by users.company / vehicle company; cannot edit after received.
@@ -7,8 +8,11 @@ Current State:
 - React Purchasing: sidebar collapsible submenu (Approved, CC Fills, PO Generated, Released, Received) with live count badges; nested routes /purchasing/*.
 - Approved (Generate PO) table shows Requestor Details (requestor_name / requester_name) instead of editable PO No.; PO number auto-assigns on Generate.
 - Remote access (CONFIRMED WORKING 2026-07-13): IIS LAN + Cloudflare Tunnel, same URL https://fuelapp.mteinc.net. Public NS at Cloudflare (skip/sasha); office DNS A → 10.10.20.40. Tunnel origin must be http://127.0.0.1:80 + Host header fuelapp.mteinc.net (https://127.0.0.1:443 caused mobile 502/Host Error). Guide: REMOTE_ACCESS.TXT. Vercel+API tunnel is legacy (TUNNEL_SETUP.TXT).
+- Site icons: full MTE logo (light #F5F5F5 canvas) as favicon/apple-touch in frontend/public and PWA 192/512 under pwa/icons; regenerate with python deploy/generate_site_icons.py then rebuild frontend.
 - Record Receipt dialog: optional Remarks/Notes (receiving_remarks); Update/receive fixed (missing Optional import in api/schemas/receiving.py).
 - React Billing: sidebar submenu (Vendor Invoices, CC Reconciliation) with count badges; nested routes /billing/*.
+- Reports / Billing / Purchasing Received: primary identifier is PO No. (po_reference), not Request #; CSV/PDF/Excel match.
+- Vendor Invoices / Billed (Corrections) / CC Reconciliation: collapsible groups default to collapsed (Expand all available). CC Reconciliation grouped by vendor like Vendor Invoices. Mark Reconciled always assigns Report No. (yyyymmddhhmmss, optional statement ref), returns PDF + Excel summary (auto Excel).
 
 - ALL PHASES COMPLETE: All 6 development phases from roadmap.txt are fully implemented and functional. The system is production-ready with a complete end-to-end workflow.
 
@@ -94,18 +98,15 @@ Current State:
   * test_runner.py available for running test suite.
 
 Pending Tasks:
+- Fleet: Registrations/Renewal module (LTO dates, alerts); then Insurance, PMS, Repairs.
 - Optional: Cloudflare Access in front of public fuelapp; install_cloudflared_service.ps1 if tunnel not yet a Windows service.
 - Optional enhancements: Further PO PDF template styling refinements, persist PDFs to disk/DB if archival needed.
 - Testing: Expand unit tests for DB helpers, auth flows, status transitions, role checks.
-- Reporting enhancements: Add date range filters, CSV export functionality, more detailed analytics.
-- Data validation: Add comprehensive input validation and error handling improvements.
 
 Next Steps:
+- Next fleet slice: Registrations/Renewal on vehicle records (expiry fields + list/alerts).
 - Optional: Cloudflare Access for remote users; ensure cloudflared auto-starts after reboot.
-- If needed: Add invoice amounts/dates to billing module for more detailed financial tracking.
 - Testing: Harden role checks, add comprehensive unit tests for all DB operations and business logic.
-- Reporting: Implement date range filters, CSV export, enhanced dashboard analytics.
-- Performance: Consider caching optimizations for large datasets if performance issues arise.
 
 Session note (2026-07-08 — Encoder role):
 - Role renamed user → encoder (DB migration on init_database); UI label "Encoder".

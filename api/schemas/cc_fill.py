@@ -24,7 +24,7 @@ class SettlementTypeUpdateRequest(BaseModel):
 
 
 class ReconcileCcRequest(BaseModel):
-    """Batch reconcile credit card fills against a statement."""
+    """Batch reconcile credit card fills; statement reference is optional."""
 
     requisition_ids: List[int] = Field(..., min_length=1)
-    statement_reference: str = Field(..., min_length=1)
+    statement_reference: str = ""

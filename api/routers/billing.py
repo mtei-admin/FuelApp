@@ -30,6 +30,18 @@ class MarkBilledRequest(BaseModel):
     invoice_number: str = Field(..., min_length=1)
 
 
+class BillingCorrectionRequest(BaseModel):
+    """Accounting correction for billed items."""
+
+    requisition_ids: List[int] = Field(..., min_length=1)
+
+
+class UpdateBillingReferenceRequest(BillingCorrectionRequest):
+    """Change billing reference on billed requisitions."""
+
+    invoice_number: str = Field(..., min_length=1)
+
+
 def _err(error: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
 
@@ -84,6 +96,52 @@ def mark_billed(
             actor=user,
         )
         return summary
+    except RuntimeError as error:
+        raise _err(error) from error
+
+
+@router.get("/billed")
+def list_billed(
+    db_path: Annotated[str, Depends(get_db_path)],
+    _user: BillingUser,
+) -> List[dict]:
+    """List billed vendor-invoice items (billing corrections)."""
+    return billing_service.list_billed(db_path)
+
+
+@router.post("/update-billing-reference", response_model=MessageResponse)
+def update_billing_reference(
+    payload: UpdateBillingReferenceRequest,
+    db_path: Annotated[str, Depends(get_db_path)],
+    user: BillingUser,
+) -> MessageResponse:
+    """Change vendor billing reference on billed requisitions."""
+    try:
+        billing_service.update_billing_reference(
+            db_path,
+            payload.requisition_ids,
+            payload.invoice_number,
+            actor=user,
+        )
+        return MessageResponse(message="Billing reference updated")
+    except RuntimeError as error:
+        raise _err(error) from error
+
+
+@router.post("/unbill", response_model=MessageResponse)
+def unbill(
+    payload: BillingCorrectionRequest,
+    db_path: Annotated[str, Depends(get_db_path)],
+    user: BillingUser,
+) -> MessageResponse:
+    """Remove items from billing (status back to received)."""
+    try:
+        billing_service.unbill_items(
+            db_path,
+            payload.requisition_ids,
+            actor=user,
+        )
+        return MessageResponse(message="Item(s) removed from billing")
     except RuntimeError as error:
         raise _err(error) from error
 

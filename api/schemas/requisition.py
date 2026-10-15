@@ -21,6 +21,7 @@ class RequisitionResponse(BaseModel):
     fuel_type: Optional[str] = None
     requestor_name: Optional[str] = None
     created_at: Optional[str] = None
+    po_created_at: Optional[str] = None
     updated_at: Optional[str] = None
     is_edited: bool = False
     edited_by: Optional[str] = None
@@ -63,6 +64,7 @@ class RequisitionCreateRequest(BaseModel):
     notes: str = ""
     requestor_name: str = Field(..., min_length=1)
     settlement_type: SettlementType = "vendor_invoice"
+    unit_price: Optional[float] = Field(None, ge=0)
 
 
 class RequisitionUpdateRequest(BaseModel):
@@ -75,6 +77,7 @@ class RequisitionUpdateRequest(BaseModel):
     quantity: float = 0.0
     notes: str = ""
     settlement_type: SettlementType = "vendor_invoice"
+    unit_price: Optional[float] = Field(None, ge=0)
 
 
 class ApprovalQuantityUpdateRequest(BaseModel):

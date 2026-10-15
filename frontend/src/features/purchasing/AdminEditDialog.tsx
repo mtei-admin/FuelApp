@@ -169,7 +169,7 @@ export function AdminEditDialog({
       >
         <h2>Admin Edit — {req.serial_number}</h2>
         <p className="muted">
-          {req.plate_number} · {req.vendor_name} · Superuser full edit (any status)
+          {req.plate_number} · {req.vendor_name} · Full edit (vendor, fuel, quantity, price)
         </p>
 
         <label>Status</label>

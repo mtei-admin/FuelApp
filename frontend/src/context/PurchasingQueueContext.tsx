@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import type { AdminEditPayload, CcFillPayload, PurchasingRequisition, ReceivePayload } from "../api/purchasing";
 import * as purchasingApi from "../api/purchasing";
 import * as approvalsApi from "../api/approvals";
+import * as requisitionsApi from "../api/requisitions";
 import { ApiError } from "../api/client";
 import { notifyPurchasingQueuesChanged } from "../utils/purchasingEvents";
 import { notifyBillingQueuesChanged } from "../utils/billingEvents";
@@ -75,7 +76,12 @@ export function PurchasingQueueProvider({ children }: { children: ReactNode }) {
 
   async function cancelApproved(reason: string) {
     if (!cancelTarget) return;
-    await approvalsApi.cancelApprovedRequisition(cancelTarget.id, reason);
+    const status = (cancelTarget.status || "").toLowerCase();
+    if (status === "approved") {
+      await approvalsApi.cancelApprovedRequisition(cancelTarget.id, reason);
+    } else {
+      await requisitionsApi.adminCancelRequisition(cancelTarget.id, reason);
+    }
     setCancelTarget(null);
     afterQueueMutation();
   }

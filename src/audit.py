@@ -46,13 +46,60 @@ VEHICLE_AUDIT_FIELDS = [
     "vendor_id",
     "assigned_to",
     "is_active",
+    "is_company_owned",
+    "registration_date",
+    "lto_expiry",
+]
+
+VEHICLE_REGISTRATION_AUDIT_FIELDS = [
+    "registration_date",
+    "lto_expiry",
+    "or_number",
+    "cr_number",
+    "mv_file_no",
+    "registration_remarks",
+]
+
+PMS_SCHEDULE_AUDIT_FIELDS = [
+    "interval_months",
+    "next_due_date",
+    "interval_km",
+    "last_odometer_km",
+]
+
+PMS_WORK_ORDER_AUDIT_FIELDS = [
+    "status",
+    "transaction_no",
+    "doc_date",
+    "repair_type",
+    "service_advisor",
+    "technician",
+    "terms",
+    "shop_name",
+    "remarks",
+    "previous_odometer",
+    "current_odometer",
+    "cost",
+    "service_date",
+    "opened_at",
+    "completed_at",
 ]
 
 VENDOR_AUDIT_FIELDS = ["name", "address", "is_active"]
 
 COMPANY_AUDIT_FIELDS = ["code", "name", "is_active"]
 
-USER_AUDIT_FIELDS = ["username", "full_name", "role", "email", "company", "is_active"]
+SERVICE_CENTER_AUDIT_FIELDS = ["name", "address", "contact_no", "is_active"]
+
+USER_AUDIT_FIELDS = [
+    "username",
+    "full_name",
+    "role",
+    "email",
+    "company",
+    "is_active",
+    "permissions",
+]
 
 
 def actor_from_user(user: Optional[Dict[str, Any]]) -> Dict[str, Any]:

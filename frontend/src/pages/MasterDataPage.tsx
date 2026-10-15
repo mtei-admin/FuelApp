@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { VendorsTab } from "../features/master-data/VendorsTab";
 import { CompaniesTab } from "../features/master-data/CompaniesTab";
+import { ServiceCentersTab } from "../features/master-data/ServiceCentersTab";
 import { VehiclesTab } from "../features/master-data/VehiclesTab";
 import { UsersTab } from "../features/master-data/UsersTab";
 import { canManageUsers } from "../utils/roles";
 
-type TabKey = "vendors" | "companies" | "vehicles" | "users";
+type TabKey = "vendors" | "companies" | "service-centers" | "vehicles" | "users";
 
 export function MasterDataPage() {
   const { user } = useAuth();
@@ -18,7 +19,7 @@ export function MasterDataPage() {
       <header className="page-header">
         <h1>Master Data</h1>
         <p className="subtitle">
-          Manage vendors, companies, and vehicles (soft delete only).
+          Manage vendors, companies, service centers, and vehicles (soft delete only).
           {showUsers && " Admins can enroll users on the Users tab."}
         </p>
       </header>
@@ -39,6 +40,13 @@ export function MasterDataPage() {
         </button>
         <button
           type="button"
+          className={tab === "service-centers" ? "tab active" : "tab"}
+          onClick={() => setTab("service-centers")}
+        >
+          Service Centers
+        </button>
+        <button
+          type="button"
           className={tab === "vehicles" ? "tab active" : "tab"}
           onClick={() => setTab("vehicles")}
         >
@@ -56,6 +64,7 @@ export function MasterDataPage() {
       </div>
       {tab === "vendors" && <VendorsTab />}
       {tab === "companies" && <CompaniesTab />}
+      {tab === "service-centers" && <ServiceCentersTab />}
       {tab === "vehicles" && <VehiclesTab />}
       {showUsers && tab === "users" && <UsersTab />}
     </div>

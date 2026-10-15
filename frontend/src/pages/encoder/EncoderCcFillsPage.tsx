@@ -7,6 +7,7 @@ import {
   sortPurchasingOldestFirst,
 } from "../../features/purchasing/ScrollablePurchasingList";
 import { formatQuantity } from "../../utils/format";
+import { formatRequestDate } from "../../utils/requisitionDates";
 import { getEncoderError } from "./EncoderLayout";
 
 interface EncoderOutletContext {
@@ -51,6 +52,7 @@ export function EncoderCcFillsPage() {
             <thead>
               <tr>
                 <th>Request #</th>
+                <th>Requested</th>
                 <th>Vehicle / Vendor</th>
                 <th>Fuel Type</th>
                 <th>Qty</th>
@@ -61,6 +63,7 @@ export function EncoderCcFillsPage() {
               {sorted.map((req) => (
                 <tr key={req.id}>
                   <td>{req.serial_number}</td>
+                  <td>{formatRequestDate(req.created_at)}</td>
                   <td>
                     {req.plate_number} — {req.vendor_name}
                   </td>

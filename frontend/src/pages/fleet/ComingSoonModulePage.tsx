@@ -22,8 +22,8 @@ export function ComingSoonModulePage({
       <section className="panel">
         <h2>Coming soon</h2>
         <p className="muted">
-          This module is planned for the Fleet system. Fuel and Vehicles are available now from the
-          portal home.
+          This module is planned for the Fleet system. Fuel Requests and Admin (vehicles) are
+          available now from the portal.
         </p>
         <Link to="/" className="button-link">
           Back to Fleet portal

@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import * as approvalsApi from "../api/approvals";
+import * as requisitionsApi from "../api/requisitions";
 import * as purchasingApi from "../api/purchasing";
 import type { PurchasingRequisition } from "../api/purchasing";
 import { ApiError } from "../api/client";
@@ -10,6 +11,8 @@ import { VehicleHistoryModal } from "../features/approvals/VehicleHistoryModal";
 import { useAuth } from "../context/AuthContext";
 import type { PendingRequisition } from "../types/requisition";
 import { formatPeso, formatQuantity, unitToQuantityMode } from "../utils/format";
+import { formatRequestDate } from "../utils/requisitionDates";
+import { canAdminCancelStatus } from "../utils/requisitionStatuses";
 import { canApproveRequests, canManageUsers } from "../utils/roles";
 
 function EditQuantityForm({
@@ -102,8 +105,8 @@ function EditQuantityForm({
 
 export function ApprovalsPage() {
   const { user } = useAuth();
-  const canApprove = canApproveRequests(user?.role);
-  const isSuperuser = canManageUsers(user?.role);
+  const canApprove = canApproveRequests(user);
+  const isSuperuser = canManageUsers(user);
   const [pending, setPending] = useState<PendingRequisition[]>([]);
   const [approvedAwaiting, setApprovedAwaiting] = useState<PendingRequisition[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,7 +122,7 @@ export function ApprovalsPage() {
     try {
       const pendingRows = await approvalsApi.listPendingApprovals();
       setPending(pendingRows);
-      if (canApproveRequests(user?.role)) {
+      if (canApproveRequests(user) || canManageUsers(user)) {
         setApprovedAwaiting(await approvalsApi.listApprovedAwaitingPo());
       } else {
         setApprovedAwaiting([]);
@@ -129,7 +132,7 @@ export function ApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user?.role]);
+  }, [user]);
 
   useEffect(() => {
     loadPending();
@@ -164,7 +167,12 @@ export function ApprovalsPage() {
   async function handleCancelApproved(reason: string) {
     if (!cancelTarget) return;
     try {
-      await approvalsApi.cancelApprovedRequisition(cancelTarget.id, reason);
+      const status = (cancelTarget.status || "").toLowerCase();
+      if (isSuperuser && status !== "approved") {
+        await requisitionsApi.adminCancelRequisition(cancelTarget.id, reason);
+      } else {
+        await approvalsApi.cancelApprovedRequisition(cancelTarget.id, reason);
+      }
       setCancelTarget(null);
       await loadPending();
     } catch (err) {
@@ -210,6 +218,7 @@ export function ApprovalsPage() {
               <thead>
                 <tr>
                   <th>Request #</th>
+                  <th>Requested</th>
                   <th>Vehicle</th>
                   <th>Quantity</th>
                   <th>Vendor</th>
@@ -222,6 +231,7 @@ export function ApprovalsPage() {
                 {pending.map((req) => (
                   <tr key={req.id}>
                     <td>{req.serial_number}</td>
+                    <td>{formatRequestDate(req.created_at)}</td>
                     <td>
                       {req.plate_number} - {req.model}
                     </td>
@@ -266,6 +276,15 @@ export function ApprovalsPage() {
                       ) : (
                         !isSuperuser && <span className="muted">View only</span>
                       )}
+                      {isSuperuser && canAdminCancelStatus(req.status) && (
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() => setCancelTarget(req)}
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -278,6 +297,9 @@ export function ApprovalsPage() {
               <article key={req.id} className="approval-card">
                 <p>
                   <strong>Request #:</strong> {req.serial_number}
+                </p>
+                <p>
+                  <strong>Requested:</strong> {formatRequestDate(req.created_at)}
                 </p>
                 <p>
                   <strong>Vehicle:</strong> {req.plate_number} - {req.model}
@@ -329,6 +351,15 @@ export function ApprovalsPage() {
                       </button>
                     </>
                   )}
+                  {isSuperuser && canAdminCancelStatus(req.status) && (
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => setCancelTarget(req)}
+                    >
+                      Cancel
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
@@ -350,6 +381,7 @@ export function ApprovalsPage() {
               <thead>
                 <tr>
                   <th>Request #</th>
+                  <th>Requested</th>
                   <th>Vehicle / Vendor</th>
                   <th>Fuel Type</th>
                   <th>Qty</th>
@@ -361,6 +393,7 @@ export function ApprovalsPage() {
                 {approvedAwaiting.map((req) => (
                   <tr key={req.id}>
                     <td>{req.serial_number}</td>
+                    <td>{formatRequestDate(req.created_at)}</td>
                     <td>
                       {req.plate_number} — {req.vendor_name}
                     </td>
@@ -421,7 +454,7 @@ export function ApprovalsPage() {
         />
       )}
 
-      {cancelTarget && canApprove && (
+      {cancelTarget && (canApprove || isSuperuser) && (
         <CancelApprovedDialog
           req={cancelTarget}
           onCancel={handleCancelApproved}

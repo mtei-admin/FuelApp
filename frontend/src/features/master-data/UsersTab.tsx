@@ -1,11 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import * as usersApi from "../../api/users";
 import { ApiError } from "../../api/client";
-import type { AdminUser, UserCreateRequest, UserRole, UserUpdateRequest } from "../../types/userAdmin";
-import { USER_ROLES } from "../../types/userAdmin";
+import type { AdminUser, UserCreateRequest, UserUpdateRequest } from "../../types/userAdmin";
 import * as companiesApi from "../../api/companies";
 import type { Company } from "../../types/company";
-import { formatRoleLabel } from "../../utils/format";
+import { PermissionPicker } from "./PermissionPicker";
+import { permissionsForTemplate, permissionsRequireCompany } from "../../utils/permissions";
 
 interface UserFormProps {
   initial?: AdminUser;
@@ -18,13 +18,11 @@ function UserForm({ initial, companies, onSaved, onCancel }: UserFormProps) {
   const [username, setUsername] = useState(initial?.username ?? "");
   const [fullName, setFullName] = useState(initial?.full_name ?? "");
   const [email, setEmail] = useState(initial?.email ?? "");
-  const [role, setRole] = useState<UserRole>(() => {
-    const raw = (initial?.role ?? "encoder").toLowerCase();
-    if (raw === "user") {
-      return "encoder";
-    }
-    return (USER_ROLES.includes(raw as UserRole) ? raw : "encoder") as UserRole;
-  });
+  const [permissions, setPermissions] = useState<string[]>(
+    initial?.permissions?.length
+      ? [...initial.permissions]
+      : permissionsForTemplate("encoder"),
+  );
   const activeCompanies = companies.filter((row) => row.is_active);
   const companyOptions = [...activeCompanies];
   if (initial?.company && !companyOptions.some((row) => row.code === initial.company)) {
@@ -39,15 +37,15 @@ function UserForm({ initial, companies, onSaved, onCancel }: UserFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const needsCompany = permissionsRequireCompany(permissions);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const effectiveRole = role;
-      if (!initial && effectiveRole === "encoder" && !company.trim()) {
-        setError("Company is required for encoder accounts.");
+      if (needsCompany && !company.trim()) {
+        setError("Company is required for encode (receipt / CC fill) permissions.");
         return;
       }
       if (initial) {
@@ -61,18 +59,16 @@ function UserForm({ initial, companies, onSaved, onCancel }: UserFormProps) {
         if ((email || "").trim() !== (initial.email ?? "")) {
           payload.email = email.trim();
         }
-        const initialRole = initial.role.toLowerCase() === "user" ? "encoder" : initial.role.toLowerCase();
-        if (effectiveRole !== initialRole) {
-          payload.role = effectiveRole;
+        const initialPerms = [...(initial.permissions ?? [])].sort().join("|");
+        const nextPerms = [...permissions].sort().join("|");
+        if (initialPerms !== nextPerms) {
+          payload.permissions = permissions;
         }
-        if (effectiveRole === "encoder") {
-          if (!company.trim()) {
-            setError("Company is required for encoder accounts.");
-            return;
-          }
-          if (company !== (initial.company ?? "") || initialRole !== "encoder") {
-            payload.company = company;
-          }
+        if (needsCompany && company !== (initial.company ?? "")) {
+          payload.company = company;
+        }
+        if (!needsCompany && company !== (initial.company ?? "")) {
+          payload.company = company;
         }
         if (password.trim()) {
           payload.password = password;
@@ -91,9 +87,9 @@ function UserForm({ initial, companies, onSaved, onCancel }: UserFormProps) {
           username: username.trim(),
           password,
           full_name: fullName.trim(),
-          role: effectiveRole,
+          permissions,
           email: email.trim() || undefined,
-          company: effectiveRole === "encoder" ? company : undefined,
+          company: needsCompany ? company : undefined,
         };
         await usersApi.createUser(payload);
       }
@@ -106,7 +102,7 @@ function UserForm({ initial, companies, onSaved, onCancel }: UserFormProps) {
   }
 
   return (
-    <form className="inline-form" onSubmit={handleSubmit}>
+    <form className="inline-form user-permission-form" onSubmit={handleSubmit}>
       <h3>{initial ? "Edit User" : "Enroll New User"}</h3>
       <label htmlFor="user-username">Username</label>
       <input
@@ -129,25 +125,14 @@ function UserForm({ initial, companies, onSaved, onCancel }: UserFormProps) {
         value={email}
         onChange={(e) => setEmail(e.target.value)}
       />
-      <label htmlFor="user-role">Role</label>
-      <select
-        id="user-role"
-        value={role}
-        onChange={(e) => setRole(e.target.value as UserRole)}
-      >
-        {USER_ROLES.map((r) => (
-          <option key={r} value={r}>
-            {formatRoleLabel(r)}
-          </option>
-        ))}
-      </select>
-      {role === "encoder" && (
+      <PermissionPicker selected={permissions} onChange={setPermissions} />
+      {needsCompany && (
         <>
           <label htmlFor="user-company">Company</label>
           <select
             id="user-company"
             value={company}
-            onChange={(e) => setCompany(e.target.value as CompanyName)}
+            onChange={(e) => setCompany(e.target.value)}
             required
           >
             {companyOptions.map((row) => (
@@ -200,7 +185,7 @@ export function UsersTab() {
           "Users API not found. Restart the server (deploy\\run_lan.bat) and hard-refresh the browser.",
         );
       } else if (err instanceof ApiError && err.status === 403) {
-        setError("Only superuser (admin) accounts can manage users.");
+        setError("Only accounts with Manage users permission can enroll users.");
       } else {
         setError(err instanceof ApiError ? err.message : "Failed to load users");
       }
@@ -276,7 +261,7 @@ export function UsersTab() {
               <th>Username</th>
               <th>Full Name</th>
               <th>Email</th>
-              <th>Role</th>
+              <th>Permissions</th>
               <th>Company</th>
               <th>Status</th>
               <th>Actions</th>
@@ -288,7 +273,7 @@ export function UsersTab() {
                 <td>{user.username}</td>
                 <td>{user.full_name || "—"}</td>
                 <td>{user.email || "—"}</td>
-                <td>{formatRoleLabel(user.role)}</td>
+                <td>{user.permission_summary || "—"}</td>
                 <td>{user.company || "—"}</td>
                 <td>{user.is_active ? "Active" : "Inactive"}</td>
                 <td className="actions">

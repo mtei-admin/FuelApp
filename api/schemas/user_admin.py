@@ -1,5 +1,5 @@
 """User administration API schemas (superuser only)."""
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -12,6 +12,8 @@ class UserAdminResponse(BaseModel):
     id: int
     username: str
     role: str
+    permissions: List[str] = Field(default_factory=list)
+    permission_summary: Optional[str] = None
     full_name: Optional[str] = None
     email: Optional[str] = None
     company: Optional[str] = None
@@ -25,7 +27,7 @@ class UserCreateRequest(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
     full_name: str = Field(..., min_length=1)
-    role: UserRole = "encoder"
+    permissions: List[str] = Field(default_factory=list)
     email: Optional[str] = None
     company: Optional[str] = None
 
@@ -35,7 +37,7 @@ class UserUpdateRequest(BaseModel):
 
     username: Optional[str] = Field(None, min_length=1)
     full_name: Optional[str] = Field(None, min_length=1)
-    role: Optional[UserRole] = None
+    permissions: Optional[List[str]] = None
     email: Optional[str] = None
     password: Optional[str] = Field(None, min_length=1)
     company: Optional[str] = None

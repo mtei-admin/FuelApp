@@ -10,6 +10,7 @@ import { AdminEditDialog } from "../features/purchasing/AdminEditDialog";
 import { EditBillingReferenceDialog } from "../features/reports/EditBillingReferenceDialog";
 import { useAuth } from "../context/AuthContext";
 import { formatPeso, formatQuantity } from "../utils/format";
+import { formatPoDate, formatRequestDate } from "../utils/requisitionDates";
 import { downloadFile, downloadPdfPost, downloadTextFile, safeDownloadStem } from "../utils/download";
 import { buildReportCsv } from "../utils/reportCsv";
 import { canManageUsers } from "../utils/roles";
@@ -192,7 +193,9 @@ export function ReportsPage() {
                     <strong>{String(row.po_reference ?? "—")}</strong> |{" "}
                     {String(row.plate_number ?? "—")} |{" "}
                     {formatQuantity(Number(row.quantity ?? 0), String(row.unit ?? ""))} |{" "}
-                    {formatPeso(row.total_price as number)} | {String(row.vendor_name ?? "—")}
+                    {formatPeso(row.total_price as number)} | {String(row.vendor_name ?? "—")} |{" "}
+                    Req: {formatRequestDate(row.created_at as string)} | PO:{" "}
+                    {formatPoDate(row.po_created_at as string)}
                   </span>
                   <span className="report-row-actions">
                     {isSuperuser && (
@@ -265,7 +268,9 @@ export function ReportsPage() {
                     <strong>{String(row.po_reference ?? "—")}</strong> |{" "}
                     {String(row.plate_number)} |{" "}
                     {formatQuantity(Number(row.quantity ?? 0), String(row.unit ?? ""))} |{" "}
-                    {formatPeso(row.total_price as number)} | {String(row.vendor_name ?? "—")}
+                    {formatPeso(row.total_price as number)} | {String(row.vendor_name ?? "—")} |{" "}
+                    Req: {formatRequestDate(row.created_at as string)} | PO:{" "}
+                    {formatPoDate(row.po_created_at as string)}
                   </span>
                   {isSuperuser && (
                     <span className="report-row-actions">

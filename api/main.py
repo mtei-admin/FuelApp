@@ -32,8 +32,11 @@ from api.routers import (  # noqa: E402
     dashboard,
     documents,
     encoder,
+    pms,
     purchasing,
+    registrations,
     reports,
+    service_centers,
     requisitions,
     vehicles,
     vendors,
@@ -68,8 +71,11 @@ app.include_router(auth.router, prefix=API_PREFIX)
 app.include_router(audit.router, prefix=API_PREFIX)
 app.include_router(vendors.router, prefix=API_PREFIX)
 app.include_router(companies.router, prefix=API_PREFIX)
+app.include_router(service_centers.router, prefix=API_PREFIX)
 app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(vehicles.router, prefix=API_PREFIX)
+app.include_router(registrations.router, prefix=API_PREFIX)
+app.include_router(pms.router, prefix=API_PREFIX)
 app.include_router(requisitions.router, prefix=API_PREFIX)
 app.include_router(approvals.router, prefix=API_PREFIX)
 app.include_router(encoder.router, prefix=API_PREFIX)

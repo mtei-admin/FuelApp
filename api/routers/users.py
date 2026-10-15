@@ -1,9 +1,10 @@
-"""User administration routes (superuser / admin only)."""
+"""User administration routes (manage-users permission only)."""
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.core.dependencies import get_db_path, require_roles
+from api.core.access import ManageUsersUser
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.user_admin import (
     UserAdminResponse,
@@ -14,8 +15,6 @@ from api.services import user_service
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-SuperuserOnly = Annotated[dict, Depends(require_roles("superuser"))]
-
 
 def _handle_service_error(error: Exception) -> HTTPException:
     """Convert service RuntimeError to HTTP 400."""
@@ -25,7 +24,7 @@ def _handle_service_error(error: Exception) -> HTTPException:
 @router.get("", response_model=List[UserAdminResponse])
 def list_users_route(
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: SuperuserOnly,
+    _user: ManageUsersUser,
 ) -> List[UserAdminResponse]:
     """List all users for admin enrollment and management."""
     try:
@@ -39,7 +38,7 @@ def list_users_route(
 def create_user_route(
     payload: UserCreateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: SuperuserOnly,
+    user: ManageUsersUser,
 ) -> UserAdminResponse:
     """Enroll a new user."""
     try:
@@ -48,7 +47,7 @@ def create_user_route(
             payload.username,
             payload.password,
             payload.full_name,
-            payload.role,
+            payload.permissions,
             payload.email,
             payload.company,
             actor=user,
@@ -67,7 +66,7 @@ def update_user_route(
     user_id: int,
     payload: UserUpdateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: SuperuserOnly,
+    user: ManageUsersUser,
 ) -> UserAdminResponse:
     """Update an existing user."""
     try:
@@ -76,7 +75,7 @@ def update_user_route(
             user_id,
             username=payload.username,
             full_name=payload.full_name,
-            role=payload.role,
+            permissions=payload.permissions,
             email=payload.email,
             password=payload.password,
             company=payload.company,
@@ -95,7 +94,7 @@ def update_user_route(
 def deactivate_user_route(
     user_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    current_user: SuperuserOnly,
+    current_user: ManageUsersUser,
 ) -> MessageResponse:
     """Soft-delete a user account."""
     if user_id == current_user["id"]:
@@ -114,7 +113,7 @@ def deactivate_user_route(
 def reactivate_user_route(
     user_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: SuperuserOnly,
+    user: ManageUsersUser,
 ) -> MessageResponse:
     """Reactivate a deactivated user account."""
     try:

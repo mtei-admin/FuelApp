@@ -7,12 +7,16 @@ import { useAuth } from "../../context/AuthContext";
 import { usePurchasingSectionReload } from "../../hooks/usePurchasingSectionReload";
 import { downloadFile } from "../../utils/download";
 
+import { canManageUsers, canPurchasingAdminEdit } from "../../utils/roles";
+
 export function PurchasingReleasedPage() {
   const { user } = useAuth();
-  const isSuperuser = user?.role === "superuser";
+  const canAdminEdit = canPurchasingAdminEdit(user);
+  const isSuperuser = canManageUsers(user);
   const {
     setReceiveTarget,
     setAdminEditTarget,
+    setCancelTarget,
     setError,
     undoRelease,
   } = usePurchasingQueue();
@@ -54,6 +58,7 @@ export function PurchasingReleasedPage() {
         <ReleasedPortal
           items={released}
           isSuperuser={isSuperuser}
+          canAdminEdit={canAdminEdit}
           onDownloadPdf={(req) =>
             downloadFile(
               `/api/documents/po/${req.id}`,
@@ -63,6 +68,7 @@ export function PurchasingReleasedPage() {
           onReceive={(req) => setReceiveTarget({ req, mode: "receive" })}
           onUndoRelease={handleUndoRelease}
           onAdminEdit={setAdminEditTarget}
+          onAdminCancel={isSuperuser ? setCancelTarget : undefined}
         />
       )}
     </section>

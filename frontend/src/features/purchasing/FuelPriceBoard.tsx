@@ -8,6 +8,12 @@ function priceCell(value: number | null | undefined): string {
   return formatPeso(value);
 }
 
+function hasFuelPrices(row: FuelPriceRow): boolean {
+  return [row.diesel_price, row.unleaded_price, row.premium_price].some(
+    (value) => value != null && Number(value) > 0,
+  );
+}
+
 /** Most recent vendor_fuel_prices.updated_at across rows. */
 function latestUpdatedAt(rows: FuelPriceRow[]): string | null {
   let best: string | null = null;
@@ -50,9 +56,10 @@ function BoardHeader({ lastUpdated }: { lastUpdated: string | null }) {
 
 /** Read-only board of current fuel prices for all vendors (Purchasing header). */
 export function FuelPriceBoard({ rows }: { rows: FuelPriceRow[] }) {
-  const lastUpdated = latestUpdatedAt(rows);
+  const pricedRows = rows.filter(hasFuelPrices);
+  const lastUpdated = latestUpdatedAt(pricedRows);
 
-  if (rows.length === 0) {
+  if (pricedRows.length === 0) {
     return (
       <aside className="fuel-price-board" aria-label="Current fuel prices">
         <BoardHeader lastUpdated={null} />
@@ -75,7 +82,7 @@ export function FuelPriceBoard({ rows }: { rows: FuelPriceRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {pricedRows.map((row) => (
               <tr key={row.vendor_id}>
                 <td className="fuel-price-vendor">{row.vendor_name}</td>
                 <td>{priceCell(row.diesel_price)}</td>

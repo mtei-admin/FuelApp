@@ -430,8 +430,18 @@ def build_po_pdf(db_path: str, req: Dict[str, str], po_reference: str, downloade
     unit_price = req.get("unit_price")
     total_price = req.get("total_price")
 
-    # Use current date when generating PO (not requisition creation date)
-    po_date = datetime.now().strftime("%B %d, %Y")
+    po_created = req.get("po_created_at")
+    if po_created:
+        try:
+            normalized = (
+                po_created.replace(" ", "T") if "T" not in po_created else po_created
+            )
+            parsed = datetime.fromisoformat(normalized[:19])
+            po_date = parsed.strftime("%B %d, %Y")
+        except ValueError:
+            po_date = datetime.now().strftime("%B %d, %Y")
+    else:
+        po_date = datetime.now().strftime("%B %d, %Y")
 
     # Get absolute paths for logos and header details by vehicle company
     assets_dir = Path("assets").resolve()

@@ -1,11 +1,25 @@
+Pending Tasks:
+- Fuel request company field is agreed but not built: store on the request, default from the vehicle, editable while the request is editable, Companies dropdown, no backfill, no PDF change. Encoder queues stay on the vehicle company.
+- Hard-refresh after this deploy (Ctrl+F5) so PMS, registrations, and Service Centers load.
+- Dev user joseph seeded 2026-08-26; permissions backfill includes Insurance; change password after first login if needed.
+- Streamlit legacy app (app.py) still uses role checks if anyone runs :8501 — migrate or retire.
+
 Current State:
-- Fleet portal: `/` is AttendanceHub-style module chooser (Vehicles, Fuel, coming-soon Registrations/PMS/Repairs/Insurance, Admin→Master Data). Fuel app lives under AppLayout with sidebar; entry `/fuel`. Vehicles module at `/fleet/vehicles` (reuses VehiclesTab).
-- Master Data: Vendors, Companies, Vehicles, Users tabs. Companies table seeded (MTEI, DSRDC, DIC, GCEIC, MTEI Trucking); vehicle/encoder use company code from DB (Option A text links). PDF logos/headers still hardcoded.
+- Dashboard (Accounting/Superuser, dashboard.view): nine clickable count cards plus the Current fuel prices board. Below: 12-month fuel price trend (optional vendor) and top-10 consuming vehicles per company (year/month). Used = received or billed. PO cards require po_reference. Credit-card paid_cc is in All Requests only. Click opens a view-only modal with quantity, amount, and totals. APIs: GET /api/dashboard/summary, /analytics, /vehicles, /vendors, /companies, /requests, /pos. Active Users stays on its own route.
+- User permissions: users.permissions JSON column; checkbox enrollment on Master Data → Users (templates: Encoder, Approver, Purchaser, Accounting, Superuser). Purchaser template includes fuel.requests.create, edit_own, and purchasing.admin_edit (vendor/fuel/qty/price). Baseline perms (fuel prices view, registrations view/update) apply to all logged-in users. Catalog in PERMISSIONS.TXT and src/permissions.py. API routes enforce permissions via api/core/access.py; /auth/me returns effective permissions for React UI.
+- Fleet portal: `/` is AttendanceHub-style module chooser (Fuel Requests, Registrations/Renewal live, PMS live for fleet.pms, coming-soon Repairs/Insurance, Admin→Master Data including Vehicles). Fuel app under AppLayout (`/fuel`); Master Data only via portal Admin (not Fuel home/sidebar).
+- PMS (`/fleet/pms`): company-owned vehicles; date due status (missing / overdue / due soon / current, 30-day window); optional interval_months and next_due_date. One open work order per vehicle. Schedule stores interval months, next due date, interval kilometers, and last odometer. Due status still follows the date only. Job form: transaction ID, doc. date, repair type, shop, advisor, technician, terms, previous/current odometer, remarks, and lines (type, description, qty, unit, unit price, peso discount, calculated total). Job total replaces a typed cost. Complete requires repair type, doc. date, current odometer, and one line; next due = doc. date + interval months. Current odometer must exceed the previous completed reading. Cancel leaves due date and odometer unchanged. Completed jobs are locked. API `/api/pms`. Permission `fleet.pms` (Superuser, or granted on the user). Odometer does not mark a vehicle due.
+- Registrations/Renewal (`/fleet/registrations`): company-owned vehicles only (`is_company_owned`); fields registration_date, lto_expiry/expiration_date, or_number, cr_number, mv_file_no, registration_remarks; set on Master Data vehicle form; API `/api/registrations`; alert window 30 days. DB migration adds registration columns on API startup; one-time backfill marks existing active vehicles company-owned (2026-08-25 fix).
+- Master Data: Vendors, Companies, Service Centers, Vehicles, Users tabs. Service centers store name, address, and contact number (unique name, soft delete). API `/api/service-centers`. Companies table seeded (MTEI, DSRDC, DIC, GCEIC, MTEI Trucking); vehicle/encoder use company code from DB (Option A text links). PDF logos/headers still hardcoded. PMS shop is still typed text and is not linked to service centers yet.
 - Vehicle plate numbers: letters, numbers, hyphen, spaces, and "&" only (reject other specials); unique; always uppercase on save (React Master Data, API, DB, Streamlit).
 - Encoder role (renamed from user): Requests (own + pending edit only); Encode menu — Released PO receipt + CC fills, filtered by users.company / vehicle company; cannot edit after received.
 - Credit card workflow: requestor/purchaser choose payment method; CC Fills (approved → record fill → paid_cc, no PO); Billing → CC Reconciliation against statement; vendor path unchanged.
 - Sessions: 60 min idle logout (no API calls); expires at workday end (default 18:00 local); IP updated on each authenticated request; Active Users shows single current IP.
-- React Purchasing: sidebar collapsible submenu (Approved, CC Fills, PO Generated, Released, Received) with live count badges; nested routes /purchasing/*.
+- New Request unit price: shown to all requestors; auto-fills from vendor_fuel_prices when vendor + fuel type are set; optional and editable. API create/update accepts unit_price for any request user (not purchasing-only).
+- Shared tables (Requests, Approvals, Purchasing, Billing, Reports, Master Data, Audit) use the same type scale as Registrations: 0.8125rem cells, 0.75rem headers and row action buttons.
+- Audit Transaction Logs: 15-row scroll table; search by request ID, PO number, plate number, and requestor_name (not the user account). GET /api/audit?q=.
+- Superuser admin-cancel: Cancel on Requests, Approvals (pending), Approved, PO Generated, Released, and Received. POST /api/requisitions/{id}/admin-cancel (admin.manage_users). Statuses pending/approved/po_generated/released/received; reason ≥10 chars; PO number, PO date, and receipt fields kept. Billed is not cancellable. Approver/Accounting Cancel on approved-only is unchanged.
+- React workflow lists show **Requested** (requisitions.created_at) on pre-PO queues and **PO date** (requisitions.po_created_at) on PO+ queues; shared formatAppDate(); reports/CSV include both columns.
 - Approved (Generate PO) table shows Requestor Details (requestor_name / requester_name) instead of editable PO No.; PO number auto-assigns on Generate.
 - Remote access (CONFIRMED WORKING 2026-07-13): IIS LAN + Cloudflare Tunnel, same URL https://fuelapp.mteinc.net. Public NS at Cloudflare (skip/sasha); office DNS A → 10.10.20.40. Tunnel origin must be http://127.0.0.1:80 + Host header fuelapp.mteinc.net (https://127.0.0.1:443 caused mobile 502/Host Error). Guide: REMOTE_ACCESS.TXT. Vercel+API tunnel is legacy (TUNNEL_SETUP.TXT).
 - Site icons: full MTE logo (light #F5F5F5 canvas) as favicon/apple-touch in frontend/public and PWA 192/512 under pwa/icons; regenerate with python deploy/generate_site_icons.py then rebuild frontend.
@@ -54,12 +68,10 @@ Current State:
   * Cost totals and grand totals per status group.
   * Billed items sorted by invoice number.
 
-- Dashboard Module (Finance Role Only):
-  * Month/year selector for analytics.
-  * Pie chart visualization: fuel usage by vehicle or by company (toggle).
-  * Top 10 consuming vehicles per company with total liters and request count.
-  * FULLTANK requests list grouped by company.
-  * Fuel price trend graph: monthly average prices for last 12 months, separate lines per fuel type (Diesel/Unleaded/Premium), optional vendor filter, price statistics (latest/min/max).
+- Dashboard Module (Accounting / Superuser, dashboard.view):
+  * Nine count cards: Vehicles, Vendors, Companies, All/Used/Cancelled Requests, All/Used/Cancelled POs.
+  * Used = received or billed. PO cards require a PO number. paid_cc is in All Requests only.
+  * Each card opens a view-only filtered modal. Fuel prices board, 12-month price trend, and top-10 consumers per company sit on the page. Active Users remains a separate page.
 
 - User Management Module (Finance Role Only):
   * Full CRUD: create, edit, deactivate, reactivate users.
@@ -98,13 +110,15 @@ Current State:
   * test_runner.py available for running test suite.
 
 Pending Tasks:
-- Fleet: Registrations/Renewal module (LTO dates, alerts); then Insurance, PMS, Repairs.
-- Optional: Cloudflare Access in front of public fuelapp; install_cloudflared_service.ps1 if tunnel not yet a Windows service.
+- Fleet: Insurance, then Repairs (Registrations and date-based PMS shipped).
+- Optional: install_cloudflared_service.ps1 if tunnel not yet a Windows service (auto-start after reboot).
+- Do NOT maintain Vercel + fuelapp-api.mteinc.net path; staff use https://fuelapp.mteinc.net only.
 - Optional enhancements: Further PO PDF template styling refinements, persist PDFs to disk/DB if archival needed.
 - Testing: Expand unit tests for DB helpers, auth flows, status transitions, role checks.
 
 Next Steps:
-- Next fleet slice: Registrations/Renewal on vehicle records (expiry fields + list/alerts).
+- Verify Dashboard cards/modals as Accounting or Superuser after a hard refresh (Ctrl+F5).
+- Next fleet slice: Insurance (policies/expiry on vehicles or linked records + alerts), then Repairs. PMS due stays date-only. The schedule stores interval kilometers and last odometer; job readings stay on the work order. Neither marks a vehicle due.
 - Optional: Cloudflare Access for remote users; ensure cloudflared auto-starts after reboot.
 - Testing: Harden role checks, add comprehensive unit tests for all DB operations and business logic.
 
@@ -172,17 +186,13 @@ React migration (Phase 4 complete — production):
 - LAN without IIS: deploy\run_lan.bat (port 8000). Legacy Streamlit: deploy\run_streamlit.bat (:8501).
 - Dev: deploy\run_api.bat + deploy\run_frontend.bat. See MIGRATION.TXT and DEPLOYMENT.TXT.
 
-GitHub + Vercel (CrazyDomains DNS):
-- Production frontend: https://fuel-app-two-rose.vercel.app (mteislips/fuel-app)
-- Also: https://fuelapp.mteinc.net, https://frontend-lovat-beta-54.vercel.app
-- Server .env: APP_BASE_URL + CORS_ORIGINS=https://fuel-app-two-rose.vercel.app
-- Git: master at 0042e37 (pushed 2026-06-29); code at 95f612e (direct API + cross-origin cookies)
-- Live bundle verified: VITE_API_BASE_URL=https://fuelapp-api.mteinc.net in index-yO30KNa3.js
-- Vercel env: VITE_API_BASE_URL=https://fuelapp-api.mteinc.net; API_PROXY_URL removed
-- Deploy note: CLI uploads may stall (UNKNOWN); redeploy of Ready build or dist upload works
-- GitHub auto-deploy from master may Error — use Vercel dashboard Redeploy or CLI redeploy if needed
-- Server .env: CORS_ORIGINS + SESSION_COOKIE_SAMESITE=none + SESSION_COOKIE_SECURE=true
-- CrazyDomains CNAME: fuelapp-api -> cbba9bda-5122-41b9-96a6-94c2b5594683.cfargotunnel.com
-- Local admin user seeded (superuser); use deploy\stop_api.bat before run_production.bat if port 8000 busy
-- See TUNNEL_SETUP.TXT and VERCEL_DEPLOY.TXT
+Production URL (canonical — 2026-09-10):
+- Staff and remote users: https://fuelapp.mteinc.net only.
+- Cloudflare Zero Trust published route currently origins at http://127.0.0.1:8000 (overrides local config.yml IIS:80). Production API therefore runs SERVE_FRONTEND=true so remote / returns the React login page, not API JSON. Office IIS path unchanged.
+- To restore IIS as tunnel origin: Zero Trust → Tunnels → fuelapp → Public Hostname → Service http://127.0.0.1:80 + HTTP Host Header fuelapp.mteinc.net.
+- Vercel URLs and fuelapp-api.mteinc.net are legacy — not supported.
+- Server .env: APP_BASE_URL=https://fuelapp.mteinc.net; SameSite=lax; SERVE_FRONTEND=true.
+- frontend/.env.production: VITE_API_BASE_URL empty; rebuild with deploy\build_frontend.bat.
+- Tunnel auto-start: scheduled task FuelAppCloudflaredTunnel (native cloudflared service crash-looped).
+- Legacy Vercel/tunnel docs: TUNNEL_SETUP.TXT, VERCEL_DEPLOY.TXT.
 

@@ -7,7 +7,6 @@ import {
   canAccessBilling,
   canAccessDashboard,
   canAccessEncode,
-  canAccessMasterData,
   canAccessPurchasing,
   canAccessReports,
 } from "../../utils/roles";
@@ -29,7 +28,7 @@ export function AppLayout() {
           <NavLink to="/" className="sidebar-portal-link">
             ← Fleet
           </NavLink>
-          <strong>Fuel</strong>
+          <strong>Fuel Requests</strong>
         </div>
         <div className="sidebar-identity">
           <div className="sidebar-avatar" aria-hidden="true">
@@ -42,7 +41,7 @@ export function AppLayout() {
         </div>
         <nav className="sidebar-nav">
           <NavLink to="/fuel" end className={({ isActive }) => (isActive ? "active" : "")}>
-            Fuel Home
+            Home
           </NavLink>
           <NavLink
             to="/requests"
@@ -76,14 +75,6 @@ export function AppLayout() {
               className={({ isActive }) => (isActive ? "active" : "")}
             >
               Dashboard
-            </NavLink>
-          )}
-          {canAccessMasterData(user?.role) && (
-            <NavLink
-              to="/master-data"
-              className={({ isActive }) => (isActive ? "active" : "")}
-            >
-              Master Data
             </NavLink>
           )}
           <AuditNavGroup />

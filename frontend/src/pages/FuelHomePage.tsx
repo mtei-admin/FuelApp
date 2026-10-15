@@ -1,10 +1,14 @@
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import * as purchasingApi from "../api/purchasing";
+import type { FuelPriceRow } from "../api/purchasing";
+import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import { FuelPriceBoard } from "../features/purchasing/FuelPriceBoard";
 import {
   canAccessApprovals,
   canAccessBilling,
   canAccessDashboard,
-  canAccessMasterData,
   canAccessPurchasing,
   canAccessReports,
 } from "../utils/roles";
@@ -13,20 +17,39 @@ import {
 export function FuelHomePage() {
   const { user } = useAuth();
   const role = user?.role;
+  const [fuelPrices, setFuelPrices] = useState<FuelPriceRow[]>([]);
+  const [priceError, setPriceError] = useState<string | null>(null);
+
+  const loadFuelPrices = useCallback(async () => {
+    setPriceError(null);
+    try {
+      setFuelPrices(await purchasingApi.listFuelPrices());
+    } catch (err) {
+      setPriceError(err instanceof ApiError ? err.message : "Failed to load fuel prices");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadFuelPrices();
+  }, [loadFuelPrices]);
 
   return (
     <div className="page">
-      <header className="page-header">
-        <p className="fleet-module-crumb">
-          <Link to="/">Fleet</Link>
-          <span aria-hidden="true"> / </span>
-          Fuel
-        </p>
-        <h1>Fuel</h1>
-        <p className="subtitle">
-          Signed in as <strong>{user?.full_name || user?.username}</strong> ({role})
-        </p>
+      <header className="page-header purchasing-header">
+        <div className="purchasing-header-main">
+          <p className="fleet-module-crumb">
+            <Link to="/">Fleet</Link>
+            <span aria-hidden="true"> / </span>
+            Fuel Requests
+          </p>
+          <h1>Fuel Requests</h1>
+          <p className="subtitle">
+            Signed in as <strong>{user?.full_name || user?.username}</strong> ({role})
+          </p>
+        </div>
+        <FuelPriceBoard rows={fuelPrices} />
       </header>
+      {priceError && <p className="error banner">{priceError}</p>}
       <div className="card-grid">
         <Link to="/requests" className="card-link">
           <h2>Fuel Requests</h2>
@@ -59,13 +82,7 @@ export function FuelHomePage() {
         {canAccessDashboard(role) && (
           <Link to="/dashboard" className="card-link">
             <h2>Dashboard</h2>
-            <p>Usage analytics</p>
-          </Link>
-        )}
-        {canAccessMasterData(role) && (
-          <Link to="/master-data" className="card-link">
-            <h2>Master Data</h2>
-            <p>Vendors, companies, vehicles, users</p>
+            <p>Fleet and request counts</p>
           </Link>
         )}
       </div>

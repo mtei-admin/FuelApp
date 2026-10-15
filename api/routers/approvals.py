@@ -3,7 +3,8 @@ from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.core.dependencies import get_current_user, get_db_path, require_roles
+from api.core.access import ApproveUser, ViewApprovalsUser
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.requisition import (
     ApprovalQuantityUpdateRequest,
@@ -14,15 +15,6 @@ from api.schemas.requisition import (
 from api.services import approval_service
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
-
-ViewApprovalsUser = Annotated[
-    dict,
-    Depends(require_roles("approver", "purchaser", "accounting", "superuser")),
-]
-ApproveUser = Annotated[
-    dict,
-    Depends(require_roles("approver", "accounting", "superuser")),
-]
 
 
 def _handle_service_error(error: Exception) -> HTTPException:
@@ -57,7 +49,7 @@ def list_pending_route(
 ) -> List[PendingRequisitionResponse]:
     """List pending requisitions for approval queue."""
     try:
-        rows = approval_service.list_pending(db_path, user["role"])
+        rows = approval_service.list_pending(db_path, user)
         return [PendingRequisitionResponse(**row) for row in rows]
     except RuntimeError as error:
         raise _handle_service_error(error) from error
@@ -138,7 +130,7 @@ def update_quantity_route(
             db_path,
             requisition_id,
             user["id"],
-            user["role"],
+            user,
             payload.quantity_mode,
             payload.quantity,
             payload.notes,

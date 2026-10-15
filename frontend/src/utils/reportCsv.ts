@@ -13,7 +13,8 @@ const REPORT_CSV_HEADERS = [
   "Invoice #",
   "CC Stmt #",
   "Requested By",
-  "Created",
+  "Requested",
+  "PO Date",
 ] as const;
 
 function csvCell(value: unknown): string {
@@ -64,6 +65,7 @@ export function buildReportCsv(rows: Record<string, unknown>[]): string {
         row.cc_statement_reference ?? "",
         row.requester_name ?? "",
         row.created_at ?? "",
+        row.po_created_at ?? "",
       ]
         .map(csvCell)
         .join(","),

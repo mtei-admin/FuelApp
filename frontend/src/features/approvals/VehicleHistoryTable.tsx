@@ -1,5 +1,6 @@
 import type { VehicleHistoryItem } from "../../types/requisition";
 import { formatPeso, formatQuantity } from "../../utils/format";
+import { formatRequestDate } from "../../utils/requisitionDates";
 
 export function VehicleHistoryTable({
   items,
@@ -21,7 +22,7 @@ export function VehicleHistoryTable({
       <thead>
         <tr>
           <th>Request #</th>
-          <th>Date</th>
+          <th>Requested</th>
           <th>Qty</th>
           <th>Fuel</th>
           <th>Vendor</th>
@@ -37,7 +38,7 @@ export function VehicleHistoryTable({
             className={row.id === highlightId ? "history-row-current" : undefined}
           >
             <td>{row.serial_number ?? "—"}</td>
-            <td>{row.created_at?.slice(0, 10) ?? "—"}</td>
+            <td>{formatRequestDate(row.created_at)}</td>
             <td>{formatQuantity(row.quantity, row.unit)}</td>
             <td>{row.fuel_type ?? "—"}</td>
             <td>{row.vendor_name ?? "—"}</td>

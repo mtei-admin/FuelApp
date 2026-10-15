@@ -4,9 +4,10 @@ import * as encoderApi from "../../api/encoder";
 import type { PurchasingRequisition } from "../../api/purchasing";
 import {
   ScrollablePurchasingList,
-  sortPurchasingOldestFirst,
+  sortByPoDate,
 } from "../../features/purchasing/ScrollablePurchasingList";
 import { formatQuantity } from "../../utils/format";
+import { formatPoDate } from "../../utils/requisitionDates";
 import { getEncoderError } from "./EncoderLayout";
 
 interface EncoderOutletContext {
@@ -35,7 +36,7 @@ export function EncoderReleasedPage() {
     load();
   }, [load, reloadToken]);
 
-  const sorted = useMemo(() => sortPurchasingOldestFirst(items), [items]);
+  const sorted = useMemo(() => sortByPoDate(items), [items]);
 
   if (loading) return <p className="loading">Loading released POs...</p>;
 
@@ -51,6 +52,7 @@ export function EncoderReleasedPage() {
             <thead>
               <tr>
                 <th>Request #</th>
+                <th>PO date</th>
                 <th>Vehicle / Vendor</th>
                 <th>Fuel Type</th>
                 <th>Qty</th>
@@ -61,6 +63,7 @@ export function EncoderReleasedPage() {
               {sorted.map((req) => (
                 <tr key={req.id}>
                   <td>{req.serial_number}</td>
+                  <td>{formatPoDate(req.po_created_at)}</td>
                   <td>
                     {req.plate_number} — {req.vendor_name}
                   </td>

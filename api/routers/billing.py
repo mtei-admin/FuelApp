@@ -4,18 +4,13 @@ from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from api.core.dependencies import get_db_path, require_roles
+from api.core.access import BillingUser
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.cc_fill import ReconcileCcRequest
 from api.services import billing_service
 
 router = APIRouter(prefix="/billing", tags=["billing"])
-
-BillingUser = Annotated[
-    dict,
-    Depends(require_roles("purchaser", "accounting", "superuser")),
-]
-
 
 class ActualQuantityRequest(BaseModel):
     """Actual quantity for FULLTANK billing."""

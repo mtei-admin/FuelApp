@@ -2,6 +2,11 @@
 - api/services/company_service.py: Company create/update/deactivate/reactivate with audit logging.
 - api/schemas/company.py: Company API schemas.
 - frontend/src/features/master-data/CompaniesTab.tsx: Companies master data tab.
+- api/routers/service_centers.py: Service center master data CRUD (/api/service-centers).
+- api/services/service_center_service.py: Service center create/update/deactivate/reactivate with audit logging.
+- api/schemas/service_center.py: Service center API schemas.
+- frontend/src/features/master-data/ServiceCentersTab.tsx: Service Centers master data tab.
+- frontend/src/api/serviceCenters.ts: Service centers API client.
 - frontend/src/api/companies.ts: Companies API client.
 - api/routers/encoder.py: Encoder routes — company-scoped released PO receipt and CC fill (/api/encoder/*).
 - api/services/encoder_service.py: Encoder queue counts, list, and record receipt/CC fill with company scope checks.
@@ -21,7 +26,7 @@
 - api/schemas/releasing.py: PO release request schema (date, remarks).
 - api/routers/billing.py: Received items, actual quantity update, mark billed batch.
 - api/routers/reports.py: Status summary, CSV export, PDF export endpoints.
-- api/routers/dashboard.py: Analytics aggregation (usage, trends) with year/month/vendor filters; /active-users for superuser.
+- api/routers/dashboard.py: Card counts and modal lists (/summary, /vehicles, /vendors, /companies, /requests, /pos); /analytics for price trend and top consumers; /active-users for superuser.
 - api/services/session_service.py: Collapses user_sessions into online users (15 min online badge, device count, current IP).
 - api/schemas/session.py: Active users response schemas for Audit > Active Users.
 - src/session_policy.py: Session idle timeout, workday end expiry, and cookie max_age helpers.
@@ -30,7 +35,7 @@
 - api/services/purchasing_service.py: Purchasing workflow wrapping src/database.py and PO logic.
 - api/services/billing_service.py: Billing reconciliation and mark-billed batch logic.
 - api/services/reports_service.py: Grouped report data and CSV builder.
-- api/services/dashboard_service.py: Dashboard analytics aggregation.
+- api/services/dashboard_service.py: Dashboard card counts and modal list wrappers.
 - api/services/pdf_service.py: PDF/Excel generation for PO, reports, and billed summaries via pdf_gen/xlsx_gen.
 - api/routers/users.py: User enrollment and admin management (superuser only).
 - api/services/user_service.py: Wraps create/list/update user DB helpers with bcrypt hashing.
@@ -39,7 +44,9 @@
 - frontend/src/api/users.ts: User admin API client.
 - frontend/src/pages/BillingPage.tsx: Actual quantity entry, batch mark billed, summary PDF.
 - frontend/src/pages/ReportsPage.tsx: Status summary with CSV/PDF download.
-- frontend/src/pages/DashboardPage.tsx: Usage analytics, fuel price trends, and Active Users panel (superuser).
+- frontend/src/pages/DashboardPage.tsx: Nine count cards, fuel price board, price trend, and top-10 consumers.
+- frontend/src/features/dashboard/DashboardAnalytics.tsx: Price-trend SVG chart and top-10 consumers by company.
+- frontend/src/features/dashboard/DashboardDetailModal.tsx: Dashboard card list modal with filters and scroll table.
 - frontend/src/api/purchasing.ts: Purchasing API client.
 - frontend/src/api/billing.ts: Billing API client.
 - frontend/src/api/reports.ts: Reports API client.
@@ -57,11 +64,24 @@
 - frontend/src/pages/RequestsPage.tsx: New request form, history, one-time edit.
 - frontend/src/pages/ApprovalsPage.tsx: Pending queue with desktop table and mobile cards.
 - api/routers/vehicles.py: Vehicle list, options, create, update, deactivate endpoints.
+- api/routers/registrations.py: Fleet Registrations/Renewal list, summary, update LTO/OR-CR.
+- api/services/registration_service.py: Registration alerts and save wrapping src/database.py.
+- api/routers/pms.py: Fleet PMS list, summary, schedule update, and work-order open/complete/cancel/history.
+- api/services/pms_service.py: PMS due dates and work orders wrapping src/database.py, with audit.
+- api/schemas/pms.py: PMS vehicle, summary, schedule, and work-order schemas.
+- api/schemas/registration.py: Registration response/update/summary schemas.
+- frontend/src/pages/fleet/RegistrationsPage.tsx: Registrations list, filters, alert chips.
+- frontend/src/features/registrations/RenewalDialog.tsx: Edit LTO expiry and OR/CR fields.
+- frontend/src/api/registrations.ts: Registrations API client.
+- frontend/src/pages/fleet/PmsPage.tsx: PMS due list, filters, and job actions.
+- frontend/src/features/pms/PmsDialogs.tsx: PMS schedule, open, complete, and history dialogs.
+- frontend/src/api/pms.ts: PMS API client.
 - api/services/vendor_service.py: Vendor master data service wrapping src/database.py.
 - api/services/vehicle_service.py: Vehicle master data service wrapping src/database.py.
 - api/main.py: FastAPI entry point with CORS, health check, and auth router.
 - api/core/config.py: API settings (DB path, session cookie, CORS origins).
-- api/core/dependencies.py: Session cookie auth dependencies and role guards.
+- api/core/access.py: Permission-based FastAPI user dependencies (MasterDataUser, PurchasingUser, etc.).
+- api/core/dependencies.py: Session cookie auth, get_current_user, and require_permission guards.
 - api/routers/auth.py: Login, logout, and /me endpoints.
 - api/services/auth_service.py: Authentication business logic wrapping src/database.py.
 - deploy/run_api.bat: Start FastAPI dev server on port 8000.
@@ -95,6 +115,7 @@
 - src/__init__.py: Package marker for core application code.
 - src/auth.py: Authentication helpers (bcrypt hash/verify).
 - src/database.py: Initializes the SQLite database, sets WAL/foreign keys, creates users/vendors/cars/requisitions tables, system_sequences for request/PO serial counters, and provides CRUD helpers (users/vendors/cars/requisitions lifecycle) and analytics queries (fuel usage, price trends).
+- src/permissions.py: User permission codes, role templates, implied-permission expansion, migration backfill, and effective access checks (checkbox permission model).
 - src/modules/__init__.py: Package marker for UI modules.
 - src/modules/dashboard.py: Dashboard UI with fuel usage analytics (pie charts by vehicle/company, top 10 consuming vehicles per company, FULLTANK requests list, fuel price trend graph with vendor filter).
 - src/modules/master_data.py: Vendors and cars management UI (create/reactivate, soft delete).

@@ -7,6 +7,7 @@ from src.database import (
     delete_user_session,
     fetch_user_by_username,
 )
+from src.permissions import build_public_user
 
 
 def authenticate_user(
@@ -22,6 +23,7 @@ def authenticate_user(
         db_path: SQLite database path.
         username: Login username.
         password: Plain-text password.
+        ip_address: Client IP at login.
 
     Returns:
         Tuple of (public_user, session_token, error_message).
@@ -36,15 +38,7 @@ def authenticate_user(
         return None, None, "Invalid credentials or inactive account."
 
     token = create_user_session(db_path, user["id"], ip_address=ip_address)
-    public_user = {
-        "id": user["id"],
-        "username": user["username"],
-        "role": user["role"],
-        "full_name": user.get("full_name"),
-        "email": user.get("email"),
-        "company": user.get("company"),
-        "is_active": bool(user.get("is_active")),
-    }
+    public_user = build_public_user(user)
     return public_user, token, None
 
 

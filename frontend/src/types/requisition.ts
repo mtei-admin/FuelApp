@@ -12,6 +12,7 @@ export interface Requisition {
   fuel_type?: string | null;
   requestor_name?: string | null;
   created_at?: string | null;
+  po_created_at?: string | null;
   updated_at?: string | null;
   is_edited: boolean;
   edited_by?: string | null;
@@ -64,6 +65,7 @@ export interface RequisitionCreateRequest {
   notes?: string;
   requestor_name: string;
   settlement_type?: SettlementType;
+  unit_price?: number | null;
 }
 
 export type SettlementType = "vendor_invoice" | "credit_card";
@@ -76,6 +78,7 @@ export interface RequisitionUpdateRequest {
   quantity: number;
   notes?: string;
   settlement_type?: SettlementType;
+  unit_price?: number | null;
 }
 
 export interface ApprovalQuantityUpdateRequest {

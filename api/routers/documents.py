@@ -5,16 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 from pydantic import BaseModel
 
-from api.core.dependencies import get_db_path, require_roles
+from api.core.access import PurchasingUser as DocUser
+from api.core.dependencies import get_db_path
 from api.services import pdf_service
 
 router = APIRouter(prefix="/documents", tags=["documents"])
-
-DocUser = Annotated[
-    dict,
-    Depends(require_roles("purchaser", "accounting", "superuser")),
-]
-
 
 class BilledSummaryRequest(BaseModel):
     """Context for billed PO summary PDF."""

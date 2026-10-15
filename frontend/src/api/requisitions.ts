@@ -39,3 +39,13 @@ export async function updateRequisition(
     body: JSON.stringify(payload),
   });
 }
+
+export async function adminCancelRequisition(
+  id: number,
+  reason: string,
+): Promise<void> {
+  await apiFetch<{ message: string }>(`/api/requisitions/${id}/admin-cancel`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}

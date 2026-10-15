@@ -47,6 +47,10 @@ export function ApproveDialog({
         <p className="muted">
           Requestor: {req.requestor_name ?? req.requester_name ?? "—"}
         </p>
+        <p className="approve-notes">
+          <strong>Notes / Remarks:</strong>{" "}
+          {(req.notes ?? "").trim() || "—"}
+        </p>
 
         <h3 className="history-section-title">Vehicle request history</h3>
         {loading && <p className="loading">Loading history...</p>}

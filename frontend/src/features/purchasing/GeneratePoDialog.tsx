@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import * as purchasingApi from "../../api/purchasing";
 import type { PoSignatory, PurchasingRequisition } from "../../api/purchasing";
-import { formatQuantity } from "../../utils/format";
+import { formatQuantity, formatRoleLabel } from "../../utils/format";
 
 function displayName(signatory: PoSignatory): string {
   return signatory.full_name || signatory.username || `User #${signatory.id}`;
@@ -118,7 +118,7 @@ export function GeneratePoDialog({
             {signatories.map((row) => (
               <option key={row.id} value={row.id}>
                 {displayName(row)}
-                {row.role ? ` (${row.role})` : ""}
+                {row.role ? ` (${formatRoleLabel(row.role)})` : ""}
               </option>
             ))}
           </select>

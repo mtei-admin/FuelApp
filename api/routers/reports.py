@@ -5,16 +5,11 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 
-from api.core.dependencies import get_db_path, require_roles
+from api.core.access import ReportsUser
+from api.core.dependencies import get_db_path
 from api.services import pdf_service, reports_service
 
 router = APIRouter(prefix="/reports", tags=["reports"])
-
-ReportsUser = Annotated[
-    dict,
-    Depends(require_roles("purchaser", "accounting", "superuser")),
-]
-
 
 def _build(
     db_path: str,

@@ -1,5 +1,5 @@
 """Authentication API schemas."""
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -17,8 +17,10 @@ class UserResponse(BaseModel):
     id: int
     username: str
     role: str
+    permissions: List[str] = Field(default_factory=list)
     full_name: Optional[str] = None
     email: Optional[str] = None
+    company: Optional[str] = None
     is_active: bool = True
 
 

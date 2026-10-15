@@ -15,11 +15,12 @@ import {
   getPurchasingError,
 } from "../../context/PurchasingQueueContext";
 import { useAuth } from "../../context/AuthContext";
-import { canApproveRequests } from "../../utils/roles";
+import { canApproveRequests, canManageUsers } from "../../utils/roles";
 
 function PurchasingLayoutContent() {
   const { user } = useAuth();
-  const canCancelApproved = canApproveRequests(user?.role);
+  const canCancelApproved = canApproveRequests(user);
+  const isSuperuser = canManageUsers(user);
   const {
     receiveTarget,
     setReceiveTarget,
@@ -108,7 +109,7 @@ function PurchasingLayoutContent() {
         />
       )}
 
-      {cancelTarget && canCancelApproved && (
+      {cancelTarget && (canCancelApproved || isSuperuser) && (
         <CancelApprovedDialog
           req={cancelTarget}
           onCancel={cancelApproved}

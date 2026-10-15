@@ -1,3 +1,51 @@
+2026-10-13 | Fleet | PMS schedule also stores interval kilometers and the last odometer. Due status still follows the next due date.
+2026-10-13 | Fleet | PMS job lines no longer include an Item no. field.
+2026-10-13 | Master Data | Service Centers tab: name, address, and contact number. Names are unique. Deactivate and reactivate; no hard delete.
+2026-10-13 | Fleet | PMS job form: repair header, previous/current odometer, and parts/service lines. Job total is the sum of line totals. Completing requires repair type, doc. date, current odometer, and one line; doc. date rolls the next due date. Completed jobs stay locked.
+2026-10-13 | Fleet | PMS: date due dates and work orders (open, complete, cancel, history). Due when the next date is past or within 30 days. Completing a job rolls the next due date by the interval. Permission fleet.pms.
+2026-09-15 | Dashboard | Price trend (12 months) and top-10 consumers per company shown below the cards.
+2026-09-15 | Audit | Transaction Logs requestor search uses requestor_name, not the user account.
+2026-09-15 | Audit | Transaction Logs table shows 15 rows then scrolls (sticky header).
+2026-09-14 | Dashboard | Count numbers sit on the right of each card and are larger.
+2026-09-14 | Dashboard | Every modal shows quantity, amount, and totals (vehicles/vendors/companies use request aggregates).
+2026-09-14 | Dashboard | Modal filters stay on one row with Apply/Clear.
+2026-09-14 | Dashboard | Current fuel prices board shown beside the count cards.
+2026-09-14 | Dashboard | Count cards are 50% smaller; 3x3 layout unchanged.
+2026-09-14 | Dashboard | Card grid (vehicles, vendors, companies, requests, POs) with view-only filter modals; used = received or billed.
+2026-09-14 | Approvals | Approve dialog shows Notes/Remarks for the current request.
+2026-09-14 | Fuel | New Request unit price auto-fills from vendor fuel board for all requestors; still optional and editable.
+2026-09-12 | Fleet | Registrations Actions column no longer clips the Update button.
+2026-09-12 | Fleet | Registrations table shows 12 rows then scrolls (sticky header).
+2026-09-12 | UI | Shared data tables use Registrations scale (0.8125rem body, 0.75rem headers/action buttons).
+2026-09-12 | Fuel | Superuser Cancel on PO Generated, Released, and Received (plus pending/approved); billed still blocked.
+2026-09-12 | Fuel | Superuser admin-cancel for pending, approved, and PO-generated requests (reason required; PO number kept).
+2026-09-10 | Deploy | Remote UI: production API serves React (SERVE_FRONTEND=true) because Cloudflare tunnel still origins at :8000, not IIS.
+2026-09-10 | Deploy | Production URL confirmed: https://fuelapp.mteinc.net only; Vercel + fuelapp-api.mteinc.net deprecated (HANDOFF updated).
+2026-09-09 | Fuel | Workflow tables: Requested (created_at) and PO date (po_created_at) columns; DB migration + backfill; reports CSV.
+2026-09-04 | Users | Purchaser role template: grant fuel.requests.create and fuel.requests.edit_own; DB backfill on API startup.
+2026-08-29 | Purchasing | Fix Generate PO dialog crash: restore missing formatQuantity import; permission helpers use full user object on Approved page.
+2026-08-29 | Purchasing | Fix PO signatory list: restore approvers (purchasing.sign_po) and permission-based validation on generate PO.
+2026-08-29 | Fleet | Fix Fuel Requests portal card: admin/superuser users route to /fuel instead of blocked /encode.
+2026-08-26 | API | Phase 2 permissions: all API routers enforce require_permission (access.py); edit/receive/signatory logic uses permission codes.
+2026-08-26 | Users | Checkbox permission sets replace role dropdown on Master Data Users tab; templates + DB migration from legacy roles.
+2026-08-26 | Fleet | Insurance portal access for joseph (encoder early access) and fleet admin roles; other users see locked card.
+2026-08-26 | Fleet | Registrations: all columns visible in panel (wide layout, compact fixed table; no clipped overflow).
+2026-08-26 | Fleet | Registrations table scrolls inside panel; width aligned with container (no overflow past card).
+2026-08-26 | Master Data | Vehicles Save/Cancel keeps scroll position on the edited row (no full-list loading flash).
+2026-08-26 | Master Data | Vehicles Edit opens inline form in place of the row; Add Entry inserts form at top of table.
+2026-08-25 | Master Data | Vehicles Edit/Add opens form-only view and scrolls to the form (table hidden until Save/Cancel).
+2026-08-25 | Fleet | Fix Registrations empty: migrate cars registration columns on startup; one-time backfill is_company_owned for existing active vehicles; new vehicle form defaults Company owned to checked.
+2026-08-25 | Fuel | Home (/fuel): show Current fuel prices board (same as Purchasing); fuel-prices GET open to all logged-in users.
+2026-08-25 | Purchasing | Current fuel prices board hides vendors with no diesel/unleaded/premium prices set.
+2026-08-25 | Fleet | Portal home: all cards open to every user except Admin (master-data roles only); Registrations API/route unlocked for all authenticated users.
+2026-08-25 | Fleet | Portal home: Admin card clickable for master-data roles (approver, purchaser, accounting, superuser); other non-fuel cards stay locked.
+2026-08-20 | Fleet | Portal home: all module cards visible to every logged-in user; only Fuel Requests is clickable (others show Coming soon).
+2026-08-19 | Purchasing | PO Generated, Released, Received: PO No. is first column; Request # moved to secondary column (aligns with Reports/Billing).
+2026-08-13 | Master Data | Vehicle form: Registration date, Expiration date, Company owned checkbox; Registrations/Renewal lists company-owned vehicles only.
+2026-08-13 | Fleet | Registrations/Renewal module: LTO expiry + OR/CR/MV fields on vehicles; list with expired/due-soon/missing alerts; update dialog; portal card live (no Coming soon).
+2026-08-13 | Fuel | Remove Master Data card and sidebar link from Fuel Requests (use portal Admin card only).
+2026-08-13 | Fleet | Portal: rename Fuel card to Fuel Requests.
+2026-08-13 | Fleet | Portal: remove Vehicles card — vehicles stay under Admin → Master Data.
 2026-08-13 | Fleet | Portal landing (AttendanceHub-style cards); Vehicles module shell; Fuel enters existing app via /fuel; placeholders for Registrations/PMS/Repairs/Insurance.
 2026-08-13 | Admin | Admin Edit available on Billed (Corrections) and Reports for every status; Approvals Admin Edit not gated by approve role.
 2026-08-03 | Billing | CC Reconciliation: system Report No. (yyyymmddhhmmss); statement reference optional; stored on rows + PDF/Excel.

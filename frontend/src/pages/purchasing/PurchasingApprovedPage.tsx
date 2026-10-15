@@ -10,14 +10,15 @@ import { useAuth } from "../../context/AuthContext";
 import { usePurchasingSectionReload } from "../../hooks/usePurchasingSectionReload";
 import { notifyPurchasingQueuesChanged } from "../../utils/purchasingEvents";
 import { formatQuantity } from "../../utils/format";
-import { canApproveRequests, canManageUsers } from "../../utils/roles";
+import { formatRequestDate } from "../../utils/requisitionDates";
+import { canApproveRequests, canPurchasingAdminEdit } from "../../utils/roles";
 import { GeneratePoDialog } from "../../features/purchasing/GeneratePoDialog";
 import { downloadFile } from "../../utils/download";
 
 export function PurchasingApprovedPage() {
   const { user } = useAuth();
-  const isSuperuser = canManageUsers(user?.role);
-  const canCancelApproved = canApproveRequests(user?.role);
+  const canAdminEdit = canPurchasingAdminEdit(user);
+  const canCancelApproved = canApproveRequests(user);
   const { setCancelTarget, setAdminEditTarget, setError } = usePurchasingQueue();
   const [approved, setApproved] = useState<PurchasingRequisition[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +87,7 @@ export function PurchasingApprovedPage() {
             <thead>
               <tr>
                 <th>Request #</th>
+                <th>Requested</th>
                 <th>Vehicle / Vendor</th>
                 <th>Fuel Type</th>
                 <th>Qty</th>
@@ -98,6 +100,7 @@ export function PurchasingApprovedPage() {
               {approvedSorted.map((req) => (
                 <tr key={req.id}>
                   <td>{req.serial_number}</td>
+                  <td>{formatRequestDate(req.created_at)}</td>
                   <td>
                     {req.plate_number} — {req.vendor_name}
                   </td>
@@ -122,7 +125,7 @@ export function PurchasingApprovedPage() {
                     <button type="button" onClick={() => openGeneratePo(req)}>
                       Generate PO
                     </button>
-                    {isSuperuser && (
+                    {canAdminEdit && (
                       <button
                         type="button"
                         className="secondary"

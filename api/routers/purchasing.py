@@ -4,7 +4,14 @@ from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from api.core.dependencies import get_current_user, get_db_path, require_roles
+from api.core.access import (
+    CurrentUser,
+    FuelPriceEditUser,
+    PurchasingAdminUser,
+    PurchasingUser,
+    UndoReleaseUser,
+)
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.cc_fill import RecordCcFillRequest, SettlementTypeUpdateRequest
 from api.schemas.receiving import ReceiveRequest
@@ -12,16 +19,6 @@ from api.schemas.releasing import ReleaseRequest
 from api.services import purchasing_service
 
 router = APIRouter(prefix="/purchasing", tags=["purchasing"])
-
-PurchasingUser = Annotated[
-    dict,
-    Depends(require_roles("purchaser", "accounting", "superuser")),
-]
-
-SuperUser = Annotated[
-    dict,
-    Depends(require_roles("superuser")),
-]
 
 
 class FuelPriceUpdateRequest(BaseModel):
@@ -99,9 +96,9 @@ def queue_counts_route(
 @router.get("/fuel-prices")
 def list_fuel_prices(
     db_path: Annotated[str, Depends(get_db_path)],
-    _user: PurchasingUser,
+    _user: CurrentUser,
 ) -> List[dict]:
-    """List vendors with current fuel prices."""
+    """List vendors with current fuel prices (read-only for all authenticated users)."""
     return purchasing_service.list_fuel_prices(db_path)
 
 
@@ -110,7 +107,7 @@ def update_fuel_prices(
     vendor_id: int,
     payload: FuelPriceUpdateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: PurchasingUser,
+    user: FuelPriceEditUser,
 ) -> MessageResponse:
     """Update fuel prices for a vendor."""
     try:
@@ -232,9 +229,9 @@ def release_po_route(
 def undo_release_route(
     requisition_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: SuperUser,
+    user: UndoReleaseUser,
 ) -> MessageResponse:
-    """Undo release (superuser only, not yet received)."""
+    """Undo release (purchasing.undo_release permission, not yet received)."""
     try:
         purchasing_service.undo_release_po(db_path, requisition_id, actor=user)
         return MessageResponse(message="Release undone")
@@ -262,6 +259,7 @@ def mark_received(
             actor=user,
             is_update=False,
             receiving_remarks=payload.remarks,
+            user=user,
         )
         return MessageResponse(message="Marked as received")
     except RuntimeError as error:
@@ -288,6 +286,7 @@ def update_receiving(
             actor=user,
             is_update=True,
             receiving_remarks=payload.remarks,
+            user=user,
         )
         return MessageResponse(message="Receiving updated")
     except RuntimeError as error:
@@ -344,9 +343,9 @@ def admin_edit_requisition(
     requisition_id: int,
     payload: AdminEditRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: SuperUser,
+    user: PurchasingAdminUser,
 ) -> MessageResponse:
-    """Full edit of any requisition field (superuser only, any status)."""
+    """Full edit of any requisition field (purchasing.admin_edit, any status)."""
     try:
         purchasing_service.admin_edit(
             db_path, requisition_id, payload.model_dump(exclude_none=True), actor=user

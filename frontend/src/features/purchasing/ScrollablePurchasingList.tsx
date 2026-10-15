@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { sortByRequestDate } from "../../utils/requisitionDates";
 
 /** Visible row count in the scroll viewport (~10 entries). */
 export const PURCHASING_LIST_VISIBLE_ROWS = 10;
@@ -6,15 +7,10 @@ export const PURCHASING_LIST_VISIBLE_ROWS = 10;
 export function sortPurchasingOldestFirst<
   T extends { id: number; created_at?: string | null },
 >(items: T[]): T[] {
-  return [...items].sort((a, b) => {
-    const aTime = a.created_at ?? "";
-    const bTime = b.created_at ?? "";
-    if (aTime !== bTime) {
-      return aTime.localeCompare(bTime);
-    }
-    return a.id - b.id;
-  });
+  return sortByRequestDate(items);
 }
+
+export { sortByPoDate, sortByRequestDate } from "../../utils/requisitionDates";
 
 export function ScrollablePurchasingList({
   count,

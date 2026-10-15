@@ -15,6 +15,8 @@ export function CancelApprovedDialog({
     vendor_name?: string | null;
     quantity: number;
     unit: string;
+    status?: string | null;
+    po_reference?: string | null;
   };
   onCancel: (reason: string) => Promise<void>;
   onClose: () => void;
@@ -49,14 +51,19 @@ export function CancelApprovedDialog({
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
-        <h2 id="cancel-approved-title">Cancel approved request?</h2>
+        <h2 id="cancel-approved-title">Cancel request?</h2>
         <p className="muted">
           Request <strong>{req.serial_number}</strong> · {req.plate_number} —{" "}
           {req.vendor_name ?? "—"} · {formatQuantity(req.quantity, req.unit)}
         </p>
         <p className="warning banner">
-          Only use when the approval should be voided before a PO is generated.
-          This action is logged.
+          {["po_generated", "released", "received"].includes(
+            (req.status || "").toLowerCase(),
+          ) || req.po_reference
+            ? "This voids the request. The PO number and receipt details are kept for audit."
+            : (req.status || "").toLowerCase() === "pending"
+              ? "This cancels the pending request. This action is logged."
+              : "Only use when the approval should be voided before a PO is generated. This action is logged."}
         </p>
         <label htmlFor="cancel-reason">
           Reason for cancellation * (min {MIN_REASON_LENGTH} characters)
@@ -82,7 +89,7 @@ export function CancelApprovedDialog({
             onClick={onClose}
             disabled={submitting}
           >
-            Keep Approved
+            Keep Request
           </button>
         </div>
       </form>

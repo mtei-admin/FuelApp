@@ -1,35 +1,26 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
-  canAccessEncode,
-  canAccessFleetVehicles,
+  canAccessInsurancePortal,
   canAccessMasterData,
+  canAccessPms,
   canManageUsers,
-  canSeeComingSoonFleetModules,
+  prefersEncoderFuelPortal,
 } from "../utils/roles";
 
 type PortalCard = {
   key: string;
-  to: string;
+  to?: string;
   title: string;
   description: string;
-  icon: "vehicle" | "renewal" | "fuel" | "pms" | "repair" | "insurance" | "admin";
-  tone: "blue" | "teal" | "amber" | "green" | "slate" | "rose" | "navy";
-  visible: boolean;
+  icon: "renewal" | "fuel" | "pms" | "repair" | "insurance" | "admin";
+  tone: "teal" | "amber" | "green" | "slate" | "rose" | "navy";
+  accessible: boolean;
   comingSoon?: boolean;
 };
 
 function PortalIcon({ name }: { name: PortalCard["icon"] }) {
   switch (name) {
-    case "vehicle":
-      return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M5 11 6.5 6.5h11L19 11h1a1 1 0 0 1 1 1v6h-2v-1H5v1H3v-6a1 1 0 0 1 1-1zm2.2-3 -.8 2.5h11.2L16.8 8zM6.5 14.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5m11 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5"
-          />
-        </svg>
-      );
     case "renewal":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -60,9 +51,15 @@ function PortalIcon({ name }: { name: PortalCard["icon"] }) {
     case "repair":
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
+          {/* Screwdriver diagonal ↘ */}
           <path
             fill="currentColor"
-            d="m21.7 13.35-1 1-2.05-2.05 1-1a.5.5 0 0 1 .7 0l1.35 1.35c.2.2.2.5 0 .7M5 18.5 14.9 8.6l2.05 2.05L7.05 20.55H5z"
+            d="M8.1 2.9c.4-.4 1-.4 1.4 0l2.1 2.1c.2.2.3.5.2.8l-.3.8 1.5 1.5-1.4 1.4-1.5-1.5-.8.3c-.3.1-.6 0-.8-.2L6.4 5.9c-.4-.4-.4-1 0-1.4zM12.4 9.7l1.4-1.4 7.5 7.5c.5.5.5 1.3 0 1.8l-.4.4c-.5.5-1.3.5-1.8 0z"
+          />
+          {/* Wrench diagonal ↗ */}
+          <path
+            fill="currentColor"
+            d="M14.2 3.2c1.8-.5 3.7.2 4.8 1.8.3.5.5 1 .6 1.6l-2.3-.2c-.1-.3-.3-.5-.5-.7-.6-.7-1.6-.9-2.4-.5l-1.1.6 3.4 3.4.6-1.1c.4-.8.2-1.8-.5-2.4-.2-.2-.4-.4-.7-.5l-.2-2.3c.1 0 .2 0 .3 0zM9.9 9.9 3.3 16.5c-.5.5-.5 1.3 0 1.8l.4.4c.5.5 1.3.5 1.8 0L12.1 12z"
           />
         </svg>
       );
@@ -91,19 +88,12 @@ function PortalIcon({ name }: { name: PortalCard["icon"] }) {
 
 export function PortalHomePage() {
   const { user } = useAuth();
-  const role = user?.role;
-  const fuelTo = canAccessEncode(role) ? "/encode" : "/fuel";
+  const fuelTo = prefersEncoderFuelPortal(user) ? "/encode" : "/fuel";
+  const canAccessAdmin = canAccessMasterData(user) || canManageUsers(user);
+  const canInsurance = canAccessInsurancePortal(user);
+  const canPms = canAccessPms(user);
 
   const cards: PortalCard[] = [
-    {
-      key: "vehicles",
-      to: "/fleet/vehicles",
-      title: "Vehicles",
-      description: "Fleet master file, plates, company assignment",
-      icon: "vehicle",
-      tone: "blue",
-      visible: canAccessFleetVehicles(role),
-    },
     {
       key: "renewals",
       to: "/fleet/registrations",
@@ -111,17 +101,16 @@ export function PortalHomePage() {
       description: "OR/CR renewals, LTO dates, and alerts",
       icon: "renewal",
       tone: "teal",
-      visible: canSeeComingSoonFleetModules(role),
-      comingSoon: true,
+      accessible: true,
     },
     {
       key: "fuel",
       to: fuelTo,
-      title: "Fuel",
+      title: "Fuel Requests",
       description: "Requests, approvals, PO, billing, and reports",
       icon: "fuel",
       tone: "amber",
-      visible: true,
+      accessible: true,
     },
     {
       key: "pms",
@@ -130,8 +119,7 @@ export function PortalHomePage() {
       description: "Preventive maintenance schedules and due work",
       icon: "pms",
       tone: "green",
-      visible: canSeeComingSoonFleetModules(role),
-      comingSoon: true,
+      accessible: canPms,
     },
     {
       key: "repairs",
@@ -140,7 +128,7 @@ export function PortalHomePage() {
       description: "Work orders, shops, and repair costs",
       icon: "repair",
       tone: "rose",
-      visible: canSeeComingSoonFleetModules(role),
+      accessible: true,
       comingSoon: true,
     },
     {
@@ -150,21 +138,18 @@ export function PortalHomePage() {
       description: "Policies, expiry tracking, and claims",
       icon: "insurance",
       tone: "slate",
-      visible: canSeeComingSoonFleetModules(role),
-      comingSoon: true,
+      accessible: canInsurance,
     },
     {
       key: "admin",
       to: "/master-data",
       title: "Admin",
-      description: "Vendors, companies, users, and system setup",
+      description: "Vehicles, vendors, companies, service centers, users, and system setup",
       icon: "admin",
       tone: "navy",
-      visible: canAccessMasterData(role) || canManageUsers(role),
+      accessible: canAccessAdmin,
     },
   ];
-
-  const visibleCards = cards.filter((card) => card.visible);
 
   return (
     <div className="portal-home">
@@ -176,20 +161,38 @@ export function PortalHomePage() {
       <p className="portal-lead">Select a module to get started.</p>
 
       <div className="portal-card-grid">
-        {visibleCards.map((card) => (
-          <Link
-            key={card.key}
-            to={card.to}
-            className={`portal-card tone-${card.tone}${card.comingSoon ? " coming-soon" : ""}`}
-          >
-            <span className="portal-card-icon">
-              <PortalIcon name={card.icon} />
-            </span>
-            <h2>{card.title}</h2>
-            <p>{card.description}</p>
-            {card.comingSoon && <span className="portal-soon-badge">Coming soon</span>}
-          </Link>
-        ))}
+        {cards.map((card) => {
+          const cardClass = `portal-card tone-${card.tone}${
+            card.accessible ? "" : " portal-card-locked"
+          }`;
+          const cardBody = (
+            <>
+              <span className="portal-card-icon">
+                <PortalIcon name={card.icon} />
+              </span>
+              <h2>{card.title}</h2>
+              <p>{card.description}</p>
+              {!card.accessible && <span className="portal-soon-badge">Coming soon</span>}
+              {card.accessible && card.comingSoon && (
+                <span className="portal-soon-badge">Coming soon</span>
+              )}
+            </>
+          );
+
+          if (card.accessible && card.to) {
+            return (
+              <Link key={card.key} to={card.to} className={cardClass}>
+                {cardBody}
+              </Link>
+            );
+          }
+
+          return (
+            <div key={card.key} className={cardClass} aria-disabled="true">
+              {cardBody}
+            </div>
+          );
+        })}
       </div>
 
       <section className="portal-install">

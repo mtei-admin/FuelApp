@@ -13,7 +13,9 @@ if not exist "frontend\dist\index.html" (
 )
 
 ".venv\Scripts\python.exe" -m pip install -q -r api\requirements.txt
-set SERVE_FRONTEND=false
+rem Cloudflare Zero Trust still routes fuelapp.mteinc.net to :8000 (overrides local
+rem config.yml). Serve the React build so remote users get the login page, not JSON.
+set SERVE_FRONTEND=true
 ".venv\Scripts\python.exe" -m uvicorn api.main:app --host 127.0.0.1 --port 8000
 
 endlocal

@@ -3,7 +3,8 @@ from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.core.dependencies import get_db_path, require_roles
+from api.core.access import MasterDataUser
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.vehicle import (
     FUEL_TYPE_OPTIONS,
@@ -14,9 +15,6 @@ from api.schemas.vehicle import (
 from api.services import company_service, vehicle_service
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
-
-MasterDataUser = Annotated[dict, Depends(require_roles("approver", "purchaser", "accounting", "superuser"))]
-
 
 def _handle_service_error(error: Exception) -> HTTPException:
     """Convert service RuntimeError to HTTP 400."""
@@ -64,6 +62,9 @@ def create_vehicle_route(
             payload.company,
             payload.assigned_to,
             payload.vendor_id,
+            registration_date=payload.registration_date,
+            expiration_date=payload.expiration_date,
+            is_company_owned=payload.is_company_owned,
             actor=user,
         )
         rows = vehicle_service.get_active_vehicles(db_path)
@@ -93,6 +94,9 @@ def update_vehicle_route(
             payload.company,
             payload.assigned_to,
             payload.vendor_id,
+            registration_date=payload.registration_date,
+            expiration_date=payload.expiration_date,
+            is_company_owned=payload.is_company_owned,
             actor=user,
         )
         rows = vehicle_service.get_active_vehicles(db_path)

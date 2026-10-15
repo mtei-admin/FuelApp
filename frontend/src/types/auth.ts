@@ -2,6 +2,7 @@ export interface User {
   id: number;
   username: string;
   role: string;
+  permissions?: string[];
   full_name?: string | null;
   email?: string | null;
   company?: string | null;

@@ -17,6 +17,8 @@ export interface AdminUser {
   id: number;
   username: string;
   role: string;
+  permissions: string[];
+  permission_summary?: string | null;
   full_name?: string | null;
   email?: string | null;
   company?: string | null;
@@ -28,7 +30,7 @@ export interface UserCreateRequest {
   username: string;
   password: string;
   full_name: string;
-  role: UserRole;
+  permissions: string[];
   email?: string;
   company?: string;
 }
@@ -36,7 +38,7 @@ export interface UserCreateRequest {
 export interface UserUpdateRequest {
   username?: string;
   full_name?: string;
-  role?: UserRole;
+  permissions?: string[];
   email?: string;
   password?: string;
   company?: string;

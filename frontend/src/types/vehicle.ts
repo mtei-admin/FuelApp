@@ -9,6 +9,9 @@ export interface Vehicle {
   fuel_type?: FuelType | string | null;
   company?: string | null;
   assigned_to?: string | null;
+  registration_date?: string | null;
+  expiration_date?: string | null;
+  is_company_owned: boolean;
   is_active: boolean;
   created_at?: string | null;
 }
@@ -20,6 +23,9 @@ export interface VehicleCreateRequest {
   company: string;
   vendor_id?: number | null;
   assigned_to: string;
+  registration_date?: string | null;
+  expiration_date?: string | null;
+  is_company_owned: boolean;
 }
 
 export interface VehicleUpdateRequest extends VehicleCreateRequest {}

@@ -23,6 +23,23 @@ export function formatPeso(amount: number | null | undefined): string {
   return `₱${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Format SQLite/API timestamps as a short local date for tables. */
+export function formatAppDate(value?: string | null): string {
+  if (!value) {
+    return "—";
+  }
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) {
+    return value.slice(0, 10);
+  }
+  return parsed.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
 /** Derive fuel type dropdown options from vehicle fuel type (matches Streamlit logic). */
 export function getFuelTypeOptions(
   vehicleFuelType: string | null | undefined,

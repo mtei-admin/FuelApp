@@ -1,7 +1,8 @@
 """Database initialization utilities for the Fuel Requisition System."""
+import calendar
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple
@@ -79,6 +80,9 @@ def init_database(db_path: str) -> None:
             _ensure_car_fuel_type_column(connection)
             _ensure_car_company_column(connection)
             _ensure_car_assigned_to_column(connection)
+            _ensure_car_registration_columns(connection)
+            _backfill_company_owned_if_needed(connection)
+            _ensure_pms_tables(connection)
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS requisitions (
@@ -106,6 +110,12 @@ def init_database(db_path: str) -> None:
             _ensure_user_company_column(connection)
             _migrate_user_role_to_encoder(connection)
             _ensure_user_email_column(connection)
+            _ensure_user_permissions_column(connection)
+            _backfill_user_permissions_from_roles(connection)
+            _backfill_approver_sign_po_permission(connection)
+            _backfill_sign_po_role_alignment(connection)
+            _backfill_purchaser_request_permissions(connection)
+            _backfill_po_created_at(connection)
             _ensure_password_reset_tokens_table(connection)
             _ensure_vendor_fuel_prices_table(connection)
             _ensure_user_sessions_table(connection)
@@ -114,6 +124,7 @@ def init_database(db_path: str) -> None:
             _ensure_audit_log_table(connection)
             _ensure_companies_table(connection)
             _seed_default_companies(connection)
+            _ensure_service_centers_table(connection)
     except sqlite3.Error as error:
         message = f"Failed to initialize database at {db_file}: {error}"
         raise RuntimeError(message) from error
@@ -206,6 +217,212 @@ def _ensure_user_company_column(connection: sqlite3.Connection) -> None:
             connection.execute("ALTER TABLE users ADD COLUMN company TEXT;")
         except sqlite3.OperationalError:
             pass
+
+
+def _ensure_user_permissions_column(connection: sqlite3.Connection) -> None:
+    """Ensure permissions JSON column exists on users."""
+    cursor = connection.execute("PRAGMA table_info(users);")
+    columns = {row[1] for row in cursor.fetchall()}
+    if "permissions" not in columns:
+        try:
+            connection.execute("ALTER TABLE users ADD COLUMN permissions TEXT;")
+        except sqlite3.OperationalError:
+            pass
+
+
+def _backfill_user_permissions_from_roles(connection: sqlite3.Connection) -> None:
+    """
+    One-time backfill: map legacy users.role to explicit permissions JSON.
+
+    Skips rows that already have non-empty permissions.
+    """
+    from src.permissions import permissions_for_backfill
+
+    try:
+        connection.row_factory = sqlite3.Row
+        cursor = connection.execute(
+            """
+            SELECT id, username, role, permissions
+            FROM users
+            WHERE permissions IS NULL OR TRIM(permissions) = ''
+            """
+        )
+        rows = cursor.fetchall()
+        for row in rows:
+            payload = permissions_for_backfill(
+                row["role"] or "encoder",
+                row["username"] or "",
+            )
+            connection.execute(
+                "UPDATE users SET permissions = ? WHERE id = ?",
+                (payload, row["id"]),
+            )
+    except sqlite3.Error:
+        pass
+
+
+def _backfill_approver_sign_po_permission(connection: sqlite3.Connection) -> None:
+    """
+    Add purchasing.sign_po to active approver accounts missing it.
+
+    Preserves legacy behavior where approvers appear in the PO signatory list
+    without granting full purchasing module access.
+    """
+    from src.permissions import (
+        PURCHASING_SIGN_PO,
+        parse_stored_permissions,
+        permissions_for_role,
+        serialize_permissions,
+        user_has_permission,
+    )
+
+    try:
+        connection.row_factory = sqlite3.Row
+        cursor = connection.execute(
+            """
+            SELECT id, role, permissions
+            FROM users
+            WHERE is_active = 1
+              AND LOWER(TRIM(role)) = 'approver'
+            """
+        )
+        for row in cursor.fetchall():
+            user = dict(row)
+            if user_has_permission(user, PURCHASING_SIGN_PO):
+                continue
+            stored = parse_stored_permissions(user.get("permissions"))
+            if stored is None:
+                codes = permissions_for_role("approver")
+            else:
+                codes = list(stored)
+                if PURCHASING_SIGN_PO not in codes:
+                    codes.append(PURCHASING_SIGN_PO)
+            connection.execute(
+                "UPDATE users SET permissions = ? WHERE id = ?",
+                (serialize_permissions(codes), user["id"]),
+            )
+    except sqlite3.Error:
+        pass
+
+
+def _backfill_sign_po_role_alignment(connection: sqlite3.Connection) -> None:
+    """
+    Align purchasing.sign_po with legacy signatory roles.
+
+    Grant sign_po to accounting/superuser accounts missing it; remove it from
+    purchasers (they pick a signatory but do not sign POs themselves).
+    """
+    from src.permissions import (
+        PURCHASING_SIGN_PO,
+        parse_stored_permissions,
+        permissions_for_role,
+        serialize_permissions,
+    )
+
+    sign_po_roles = {"approver", "accounting", "superuser"}
+    try:
+        connection.row_factory = sqlite3.Row
+        cursor = connection.execute(
+            "SELECT id, role, permissions FROM users WHERE is_active = 1"
+        )
+        for row in cursor.fetchall():
+            user = dict(row)
+            role = (user.get("role") or "encoder").lower()
+            stored = parse_stored_permissions(user.get("permissions"))
+            if stored is None:
+                continue
+            codes = list(stored)
+            changed = False
+            if role in sign_po_roles and PURCHASING_SIGN_PO not in codes:
+                codes.append(PURCHASING_SIGN_PO)
+                changed = True
+            if role == "purchaser" and PURCHASING_SIGN_PO in codes:
+                codes = [code for code in codes if code != PURCHASING_SIGN_PO]
+                changed = True
+            if not changed:
+                continue
+            if role in sign_po_roles and not codes:
+                codes = permissions_for_role(role)
+            connection.execute(
+                "UPDATE users SET permissions = ? WHERE id = ?",
+                (serialize_permissions(codes), user["id"]),
+            )
+    except sqlite3.Error:
+        pass
+
+
+def _backfill_purchaser_request_permissions(connection: sqlite3.Connection) -> None:
+    """
+    Add fuel request and purchasing edit permissions to active purchaser accounts.
+
+    Purchasers may submit fuel requests and full-edit supplier, fuel, quantity, and price.
+    """
+    from src.permissions import (
+        FUEL_REQUESTS_CREATE,
+        FUEL_REQUESTS_EDIT_OWN,
+        PURCHASING_ADMIN_EDIT,
+        parse_stored_permissions,
+        permissions_for_role,
+        serialize_permissions,
+        user_has_permission,
+    )
+
+    try:
+        connection.row_factory = sqlite3.Row
+        cursor = connection.execute(
+            """
+            SELECT id, role, permissions
+            FROM users
+            WHERE is_active = 1
+              AND LOWER(TRIM(role)) = 'purchaser'
+            """
+        )
+        for row in cursor.fetchall():
+            user = dict(row)
+            if (
+                user_has_permission(user, FUEL_REQUESTS_CREATE)
+                and user_has_permission(user, FUEL_REQUESTS_EDIT_OWN)
+                and user_has_permission(user, PURCHASING_ADMIN_EDIT)
+            ):
+                continue
+            stored = parse_stored_permissions(user.get("permissions"))
+            if stored is None:
+                codes = permissions_for_role("purchaser")
+            else:
+                codes = list(stored)
+                for code in (
+                    FUEL_REQUESTS_CREATE,
+                    FUEL_REQUESTS_EDIT_OWN,
+                    PURCHASING_ADMIN_EDIT,
+                ):
+                    if code not in codes:
+                        codes.append(code)
+            connection.execute(
+                "UPDATE users SET permissions = ? WHERE id = ?",
+                (serialize_permissions(codes), user["id"]),
+            )
+    except sqlite3.Error:
+        pass
+
+
+def _backfill_po_created_at(connection: sqlite3.Connection) -> None:
+    """
+    Backfill po_created_at for rows that already passed PO generation.
+
+    Uses updated_at as best-effort when no explicit PO timestamp was stored.
+    """
+    try:
+        connection.execute(
+            """
+            UPDATE requisitions
+            SET po_created_at = updated_at
+            WHERE po_created_at IS NULL
+              AND is_active = 1
+              AND status IN ('po_generated', 'released', 'received', 'billed')
+            """
+        )
+    except sqlite3.Error:
+        pass
 
 
 def _migrate_user_role_to_encoder(connection: sqlite3.Connection) -> None:
@@ -409,6 +626,136 @@ def _ensure_car_assigned_to_column(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE cars ADD COLUMN assigned_to TEXT;")
     except sqlite3.OperationalError:
         pass
+
+
+# Days before LTO expiry that count as "due soon" for Registrations alerts.
+REGISTRATION_DUE_SOON_DAYS = 30
+
+
+def _ensure_car_registration_columns(connection: sqlite3.Connection) -> None:
+    """
+    Ensure LTO / OR-CR registration columns exist on cars.
+    """
+    cursor = connection.execute("PRAGMA table_info(cars);")
+    columns = {row[1] for row in cursor.fetchall()}
+    for column_name, column_type in (
+        ("lto_expiry", "TEXT"),
+        ("registration_date", "TEXT"),
+        ("or_number", "TEXT"),
+        ("cr_number", "TEXT"),
+        ("mv_file_no", "TEXT"),
+        ("registration_remarks", "TEXT"),
+        ("is_company_owned", "INTEGER NOT NULL DEFAULT 0"),
+    ):
+        if column_name in columns:
+            continue
+        try:
+            connection.execute(
+                f"ALTER TABLE cars ADD COLUMN {column_name} {column_type};"
+            )
+        except sqlite3.OperationalError:
+            pass
+
+
+def _backfill_company_owned_if_needed(connection: sqlite3.Connection) -> None:
+    """
+    One-time backfill for DBs that existed before is_company_owned was added.
+
+    Active master-data vehicles are treated as company-owned fleet so they appear
+    in Registrations/Renewal without manual re-save.
+    """
+    _ensure_system_sequences_table(connection)
+    cursor = connection.execute(
+        "SELECT 1 FROM system_sequences WHERE key = ?",
+        ("migration_company_owned_backfill",),
+    )
+    if cursor.fetchone():
+        return
+    connection.execute(
+        """
+        UPDATE cars
+        SET is_company_owned = 1
+        WHERE is_active = 1 AND IFNULL(is_company_owned, 0) = 0
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO system_sequences (key, next_value)
+        VALUES ('migration_company_owned_backfill', 1)
+        """
+    )
+
+
+def _normalize_optional_iso_date(value: Optional[str], label: str = "LTO expiry") -> Optional[str]:
+    """
+    Normalize an optional calendar date to YYYY-MM-DD, or None if blank.
+
+    Args:
+        value: Raw date string from API/UI.
+        label: Field name used in the validation error.
+
+    Returns:
+        ISO date string or None.
+
+    Raises:
+        RuntimeError: If the value is non-blank but not a valid YYYY-MM-DD date.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text).isoformat()
+    except ValueError as error:
+        raise RuntimeError(f"{label} must be a valid date (YYYY-MM-DD).") from error
+
+
+def _normalize_optional_text(value: Optional[str]) -> Optional[str]:
+    """Strip optional text; empty becomes None."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def registration_alert_status(
+    lto_expiry: Optional[str],
+    today: Optional[date] = None,
+    due_soon_days: int = REGISTRATION_DUE_SOON_DAYS,
+) -> str:
+    """
+    Classify a vehicle registration for alerts.
+
+    Returns one of: missing, expired, due_soon, current.
+    """
+    as_of = today or date.today()
+    if not lto_expiry or not str(lto_expiry).strip():
+        return "missing"
+    try:
+        expiry = date.fromisoformat(str(lto_expiry).strip())
+    except ValueError:
+        return "missing"
+    if expiry < as_of:
+        return "expired"
+    if expiry <= as_of + timedelta(days=due_soon_days):
+        return "due_soon"
+    return "current"
+
+
+def days_until_lto_expiry(
+    lto_expiry: Optional[str],
+    today: Optional[date] = None,
+) -> Optional[int]:
+    """Return days until LTO expiry (negative if past), or None if missing/invalid."""
+    if not lto_expiry or not str(lto_expiry).strip():
+        return None
+    try:
+        expiry = date.fromisoformat(str(lto_expiry).strip())
+    except ValueError:
+        return None
+    as_of = today or date.today()
+    return (expiry - as_of).days
 
 
 def _ensure_system_sequences_table(connection: sqlite3.Connection) -> None:
@@ -619,6 +966,7 @@ def _ensure_requisition_columns(connection: sqlite3.Connection) -> None:
         "cc_reconcile_report_no": "TEXT",
         "cc_reconciled_at": "TEXT",
         "cc_reconciled_by": "TEXT",
+        "po_created_at": "TEXT",
     }
     cursor = connection.execute("PRAGMA table_info(requisitions);")
     existing = {row[1] for row in cursor.fetchall()}
@@ -692,6 +1040,7 @@ def _requisition_list_select() -> str:
                     r.cc_reconciled_at,
                     r.cc_reconciled_by,
                     r.created_at,
+                    r.po_created_at,
                     r.updated_at,
                     r.requester_id,
                     r.requestor_name,
@@ -837,7 +1186,7 @@ def fetch_user_by_username(db_path: str, username: str) -> Optional[Dict[str, An
             connection.row_factory = sqlite3.Row
             cursor = connection.execute(
                 """
-                SELECT id, username, hashed_password, role, is_active, full_name, email, company
+                SELECT id, username, hashed_password, role, is_active, full_name, email, company, permissions
                 FROM users
                 WHERE username = ?
                 """,
@@ -866,7 +1215,7 @@ def fetch_user_by_id(db_path: str, user_id: int) -> Optional[Dict[str, Any]]:
             connection.row_factory = sqlite3.Row
             cursor = connection.execute(
                 """
-                SELECT id, username, hashed_password, role, is_active, full_name, email, company
+                SELECT id, username, hashed_password, role, is_active, full_name, email, company, permissions
                 FROM users
                 WHERE id = ?
                 """,
@@ -1372,6 +1721,7 @@ def list_requisitions_for_user(db_path: str, requester_id: int) -> List[Dict[str
                     r.fuel_type,
                     r.settlement_type,
                     r.created_at,
+                    r.po_created_at,
                     r.updated_at,
                     r.is_edited,
                     r.edited_by,
@@ -1427,6 +1777,7 @@ def fetch_requisition_by_id(db_path: str, requisition_id: int) -> Optional[Dict[
                     r.fuel_type,
                     r.requestor_name,
                     r.created_at,
+                    r.po_created_at,
                     r.updated_at,
                     r.is_edited,
                     r.edited_by,
@@ -1548,6 +1899,7 @@ def mark_legacy_cc_via_po(db_path: str, requisition_id: int) -> Dict[str, Any]:
                     SET settlement_type = ?,
                         notes = ?,
                         status = 'approved',
+                        po_created_at = NULL,
                         updated_at = ?
                     WHERE id = ? AND is_active = 1
                     """,
@@ -1640,13 +1992,18 @@ def get_role_hierarchy_level(role: str) -> int:
 
 
 def can_user_edit_requisition(
-    db_path: str, requisition_id: int, user_id: int, user_role: str
+    db_path: str,
+    requisition_id: int,
+    user_id: int,
+    user_role: str = "",
+    user: Optional[Dict[str, Any]] = None,
 ) -> tuple:
     """
     Check if a user can edit a requisition.
 
     Rules:
-    - Only creator or higher level users can edit
+    - Users with fuel.requests.edit_any override all restrictions
+    - Only creator (with edit_own) or higher level users can edit
     - Can only be edited once (if is_edited = 1, cannot edit again)
     - Cannot edit if status is not 'pending' (already in workflow)
 
@@ -1654,16 +2011,25 @@ def can_user_edit_requisition(
         db_path: File system path to the SQLite database.
         requisition_id: ID of the requisition to check.
         user_id: ID of the user attempting to edit.
-        user_role: Role of the user attempting to edit.
+        user_role: Legacy role string (fallback when user dict omitted).
+        user: Optional public/DB user dict with permissions.
 
     Returns:
         Tuple of (can_edit: bool, error_message: Optional[str]).
     """
+    from src.permissions import (
+        user_can_edit_any_requisition,
+        user_can_edit_own_requests,
+    )
+
     req = fetch_requisition_by_id(db_path, requisition_id)
     if not req:
         return False, "Requisition not found."
 
-    # Superuser can edit any requisition regardless of status or edit history
+    if user and user_can_edit_any_requisition(user):
+        return True, None
+
+    # Legacy superuser fallback
     if (user_role or "").lower() == "superuser":
         return True, None
 
@@ -1677,6 +2043,8 @@ def can_user_edit_requisition(
 
     # Check if user is creator
     if req.get("requester_id") == user_id:
+        if user and not user_can_edit_own_requests(user):
+            return False, "You do not have permission to edit requests."
         return True, None
 
     # Check if user has higher role than creator
@@ -1718,6 +2086,7 @@ def update_requisition(
     fuel_type: Optional[str] = None,
     requestor_name: Optional[str] = None,
     settlement_type: Optional[str] = None,
+    user: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Update a requisition with edit restrictions.
@@ -1742,9 +2111,19 @@ def update_requisition(
     Raises:
         RuntimeError: If edit is not allowed or database operation fails.
     """
-    can_edit, error_msg = can_user_edit_requisition(db_path, requisition_id, user_id, user_role)
+    can_edit, error_msg = can_user_edit_requisition(
+        db_path, requisition_id, user_id, user_role, user=user
+    )
     if not can_edit:
         raise RuntimeError(error_msg or "Edit not allowed.")
+
+    from src.permissions import user_can_edit_any_requisition, user_is_purchasing_admin
+
+    skip_edit_flag = False
+    if user:
+        skip_edit_flag = user_can_edit_any_requisition(user) or user_is_purchasing_admin(user)
+    if (user_role or "").lower() == "superuser":
+        skip_edit_flag = True
 
     total_price = (quantity * unit_price) if unit_price is not None else None
     timestamp = _get_local_timestamp()
@@ -1763,8 +2142,8 @@ def update_requisition(
                 "edited_by = ?",
                 "updated_at = ?",
             ]
-            # Superuser edits don't consume the one-time edit flag
-            if (user_role or "").lower() != "superuser":
+            # Override edits don't consume the one-time edit flag
+            if not skip_edit_flag:
                 updates.append("is_edited = 1")
             params = [
                 vehicle_id,
@@ -1871,11 +2250,12 @@ def admin_update_requisition(
         allowed["settlement_type"] = normalize_settlement_type(allowed.get("settlement_type"))
 
     timestamp = _get_local_timestamp()
+    pre_po_statuses = {"pending", "approved", "cancelled", "rejected", "paid_cc"}
 
     try:
         with get_connection(db_path) as connection:
             cursor = connection.execute(
-                "SELECT quantity, unit_price, actual_quantity, actual_unit_price "
+                "SELECT quantity, unit_price, actual_quantity, actual_unit_price, status, po_created_at "
                 "FROM requisitions WHERE id = ? AND is_active = 1",
                 (requisition_id,),
             )
@@ -1883,7 +2263,14 @@ def admin_update_requisition(
             if not row:
                 raise RuntimeError("Requisition not found.")
 
-            cur_qty, cur_price, cur_act_qty, cur_act_price = row
+            cur_qty, cur_price, cur_act_qty, cur_act_price, cur_status, cur_po_created = row
+
+            if "status" in allowed:
+                new_status = allowed["status"]
+                if new_status in pre_po_statuses:
+                    allowed["po_created_at"] = None
+                elif new_status == "po_generated" and not cur_po_created:
+                    allowed["po_created_at"] = timestamp
 
             # Merge current values with incoming changes for recalc
             new_qty = allowed.get("quantity", cur_qty)
@@ -1935,6 +2322,7 @@ def list_pending_requisitions(db_path: str) -> List[Dict[str, Any]]:
                     r.status,
                     r.notes,
                     r.created_at,
+                    r.po_created_at,
                     r.updated_at,
                     r.requester_id,
                     r.vehicle_id,
@@ -2049,6 +2437,9 @@ def update_requisition_status(
 
 
 MIN_CANCEL_REASON_LENGTH = 10
+ADMIN_CANCEL_STATUSES = frozenset(
+    {"pending", "approved", "po_generated", "released", "received"}
+)
 
 
 def cancel_approved_requisition(
@@ -2106,6 +2497,76 @@ def cancel_approved_requisition(
         raise RuntimeError(message) from error
 
 
+def admin_cancel_requisition(
+    db_path: str,
+    requisition_id: int,
+    cancelled_by_user_id: int,
+    reason: str,
+) -> None:
+    """
+    Superuser cancel for Request through Received (not billed).
+
+    Keeps po_reference, po_created_at, and receipt fields so a voided PO
+    remains auditable.
+
+    Args:
+        db_path: File system path to the SQLite database.
+        requisition_id: Requisition to cancel.
+        cancelled_by_user_id: Superuser performing the cancellation.
+        reason: Required explanation (minimum length enforced).
+
+    Raises:
+        RuntimeError: If not cancellable or validation fails.
+    """
+    cleaned_reason = (reason or "").strip()
+    if len(cleaned_reason) < MIN_CANCEL_REASON_LENGTH:
+        raise RuntimeError(
+            f"Cancel reason must be at least {MIN_CANCEL_REASON_LENGTH} characters."
+        )
+
+    req = fetch_requisition_by_id(db_path, requisition_id)
+    if not req:
+        raise RuntimeError("Requisition not found.")
+    current_status = (req.get("status") or "").lower()
+    if current_status not in ADMIN_CANCEL_STATUSES:
+        raise RuntimeError(
+            "Only pending, approved, PO-generated, released, or received "
+            "requests can be cancelled."
+        )
+
+    cancelled_by_name = fetch_full_name_by_id(db_path, cancelled_by_user_id)
+    timestamp = _get_local_timestamp()
+    allowed = tuple(ADMIN_CANCEL_STATUSES)
+
+    try:
+        with get_connection(db_path) as connection:
+            connection.execute(
+                """
+                UPDATE requisitions
+                SET status = 'cancelled',
+                    cancel_reason = ?,
+                    cancelled_by = ?,
+                    updated_at = ?
+                WHERE id = ? AND is_active = 1
+                  AND lower(status) IN (?, ?, ?, ?, ?)
+                """,
+                (
+                    cleaned_reason,
+                    cancelled_by_name,
+                    timestamp,
+                    requisition_id,
+                    *allowed,
+                ),
+            )
+            if connection.total_changes == 0:
+                raise RuntimeError(
+                    "Request is no longer cancellable; refresh and try again."
+                )
+    except sqlite3.Error as error:
+        message = f"Failed to admin-cancel requisition {requisition_id}: {error}"
+        raise RuntimeError(message) from error
+
+
 def check_prior_approved_requests(db_path: str, vehicle_id: int, days: int = 2) -> List[Dict[str, Any]]:
     """
     Check for prior approved requisitions for a vehicle within the specified number of days.
@@ -2134,6 +2595,7 @@ def check_prior_approved_requests(db_path: str, vehicle_id: int, days: int = 2) 
                     r.unit,
                     r.status,
                     r.created_at,
+                    r.po_created_at,
                     r.updated_at,
                     c.plate_number,
                     c.model,
@@ -2161,7 +2623,7 @@ def list_po_signatories(db_path: str) -> List[Dict[str, Any]]:
     """
     List active users who may sign purchase orders on the PDF.
 
-    Roles: approver, accounting, superuser.
+    Users with purchasing.sign_po permission are eligible.
 
     Args:
         db_path: File system path to the SQLite database.
@@ -2169,19 +2631,30 @@ def list_po_signatories(db_path: str) -> List[Dict[str, Any]]:
     Returns:
         User rows with id, username, full_name, and role ordered by display name.
     """
+    from src.permissions import PURCHASING_SIGN_PO, user_has_permission
+
     try:
         with get_connection(db_path) as connection:
             connection.row_factory = sqlite3.Row
             cursor = connection.execute(
                 """
-                SELECT id, username, role, full_name
+                SELECT id, username, role, full_name, permissions, is_active
                 FROM users
                 WHERE is_active = 1
-                  AND LOWER(TRIM(role)) IN ('approver', 'accounting', 'superuser')
                 ORDER BY COALESCE(NULLIF(TRIM(full_name), ''), username)
                 """
             )
-            return [dict(row) for row in cursor.fetchall()]
+            rows = [dict(row) for row in cursor.fetchall()]
+        return [
+            {
+                "id": row["id"],
+                "username": row["username"],
+                "role": row["role"],
+                "full_name": row.get("full_name"),
+            }
+            for row in rows
+            if user_has_permission(row, PURCHASING_SIGN_PO)
+        ]
     except sqlite3.Error as error:
         message = f"Failed to list PO signatories: {error}"
         raise RuntimeError(message) from error
@@ -2215,8 +2688,9 @@ def update_requisition_po(
         signatory_user = fetch_user_by_id(db_path, signatory_user_id)
         if not signatory_user or not signatory_user.get("is_active"):
             raise RuntimeError("Signatory not found or inactive.")
-        signatory_role = (signatory_user.get("role") or "").lower()
-        if signatory_role not in {"approver", "accounting", "superuser"}:
+        from src.permissions import PURCHASING_SIGN_PO, user_has_permission
+
+        if not user_has_permission(signatory_user, PURCHASING_SIGN_PO):
             raise RuntimeError("Selected user cannot sign purchase orders.")
         po_signatory_name = (
             (signatory_user.get("full_name") or signatory_user.get("username") or "").strip()
@@ -2269,6 +2743,7 @@ def update_requisition_po(
                             total_price = ?,
                             prepared_by = ?,
                             po_signatory = ?,
+                            po_created_at = ?,
                             updated_at = ?
                         WHERE id = ? AND is_active = 1
                         """,
@@ -2278,6 +2753,7 @@ def update_requisition_po(
                             total_price,
                             prepared_by_full_name,
                             po_signatory_name,
+                            timestamp,
                             timestamp,
                             requisition_id,
                         ),
@@ -2291,6 +2767,7 @@ def update_requisition_po(
                             unit_price = ?,
                             total_price = ?,
                             prepared_by = ?,
+                            po_created_at = ?,
                             updated_at = ?
                         WHERE id = ? AND is_active = 1
                         """,
@@ -2299,6 +2776,7 @@ def update_requisition_po(
                             unit_price,
                             total_price,
                             prepared_by_full_name,
+                            timestamp,
                             timestamp,
                             requisition_id,
                         ),
@@ -2312,6 +2790,7 @@ def update_requisition_po(
                         unit_price = ?,
                         total_price = ?,
                         po_signatory = ?,
+                        po_created_at = ?,
                         updated_at = ?
                     WHERE id = ? AND is_active = 1
                     """,
@@ -2320,6 +2799,7 @@ def update_requisition_po(
                         unit_price,
                         total_price,
                         po_signatory_name,
+                        timestamp,
                         timestamp,
                         requisition_id,
                     ),
@@ -2332,10 +2812,11 @@ def update_requisition_po(
                         po_reference = ?,
                         unit_price = ?,
                         total_price = ?,
+                        po_created_at = ?,
                         updated_at = ?
                     WHERE id = ? AND is_active = 1
                     """,
-                    (po_reference, unit_price, total_price, timestamp, requisition_id),
+                    (po_reference, unit_price, total_price, timestamp, timestamp, requisition_id),
                 )
     except sqlite3.Error as error:
         message = f"Failed to mark PO for requisition {requisition_id}: {error}"
@@ -2452,6 +2933,7 @@ def save_requisition_receiving(
     receipt_number: str,
     user_role: str = "",
     receiving_remarks: Optional[str] = None,
+    user: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Save delivery/receipt details when marking received or editing before billed.
@@ -2465,8 +2947,9 @@ def save_requisition_receiving(
         actual_unit_price: Price per liter at delivery.
         actual_quantity: Liters delivered (decimals allowed).
         receipt_number: Vendor delivery receipt number.
-        user_role: Role of the user performing the action.
+        user_role: Legacy role string (fallback when user dict omitted).
         receiving_remarks: Optional remarks about the delivery/receipt.
+        user: Optional public/DB user dict with permissions.
 
     Raises:
         RuntimeError: On validation failure or DB error.
@@ -2495,14 +2978,22 @@ def save_requisition_receiving(
             if not row:
                 raise RuntimeError("Requisition not found.")
             status = row[0]
-            is_superuser = (user_role or "").lower() == "superuser"
-            is_encoder = (user_role or "").lower() in {"encoder", "user"}
+            from src.permissions import user_is_encode_receipt_only, user_is_purchasing_admin
+
+            is_admin_override = False
+            is_encoder = False
+            if user:
+                is_admin_override = user_is_purchasing_admin(user)
+                is_encoder = user_is_encode_receipt_only(user)
+            else:
+                is_admin_override = (user_role or "").lower() == "superuser"
+                is_encoder = (user_role or "").lower() in {"encoder", "user"}
             if is_encoder:
                 if status != "released":
                     raise RuntimeError(
                         "Encoder can only record receipt for released POs."
                     )
-            elif not is_superuser:
+            elif not is_admin_override:
                 if status == "billed":
                     raise RuntimeError("Cannot edit receiving after item is billed.")
                 if status == "received":
@@ -3236,6 +3727,201 @@ def reactivate_company(db_path: str, company_id: int) -> None:
         raise RuntimeError(message) from error
 
 
+def _ensure_service_centers_table(connection: sqlite3.Connection) -> None:
+    """Create the service center master table if it is missing."""
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS service_centers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            address TEXT NOT NULL DEFAULT '',
+            contact_no TEXT NOT NULL DEFAULT '',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_service_centers_name
+        ON service_centers (name COLLATE NOCASE);
+        """
+    )
+
+
+def list_service_centers(db_path: str, active_only: bool = False) -> List[Dict[str, Any]]:
+    """
+    List service center master records.
+
+    Args:
+        db_path: Database path.
+        active_only: When True, return only active service centers.
+
+    Returns:
+        Service center rows ordered by name.
+    """
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            query = """
+                SELECT id, name, address, contact_no, is_active, created_at
+                FROM service_centers
+                ORDER BY name COLLATE NOCASE
+                """
+            if active_only:
+                query = """
+                    SELECT id, name, address, contact_no, is_active, created_at
+                    FROM service_centers
+                    WHERE is_active = 1
+                    ORDER BY name COLLATE NOCASE
+                    """
+            cursor = connection.execute(query)
+            return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as error:
+        message = f"Failed to list service centers: {error}"
+        raise RuntimeError(message) from error
+
+
+def fetch_service_center_by_id(
+    db_path: str,
+    service_center_id: int,
+) -> Optional[Dict[str, Any]]:
+    """Fetch one service center by primary key."""
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                """
+                SELECT id, name, address, contact_no, is_active, created_at
+                FROM service_centers
+                WHERE id = ?
+                """,
+                (service_center_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+    except sqlite3.Error as error:
+        message = f"Failed to fetch service center {service_center_id}: {error}"
+        raise RuntimeError(message) from error
+
+
+def _clean_service_center_fields(
+    name: str,
+    address: str,
+    contact_no: str,
+) -> tuple[str, str, str]:
+    """Normalize service center text fields and require a name."""
+    cleaned_name = (name or "").strip()
+    cleaned_address = (address or "").strip()
+    cleaned_contact = (contact_no or "").strip()
+    if not cleaned_name:
+        raise RuntimeError("Service center name is required.")
+    return cleaned_name, cleaned_address, cleaned_contact
+
+
+def create_service_center(
+    db_path: str,
+    name: str,
+    address: str = "",
+    contact_no: str = "",
+) -> int:
+    """
+    Create a service center master record.
+
+    Args:
+        db_path: Database path.
+        name: Unique display name.
+        address: Street or location text.
+        contact_no: Phone or mobile number.
+
+    Returns:
+        New service center id.
+    """
+    cleaned_name, cleaned_address, cleaned_contact = _clean_service_center_fields(
+        name, address, contact_no
+    )
+    try:
+        with get_connection(db_path) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO service_centers (name, address, contact_no, is_active)
+                VALUES (?, ?, ?, 1)
+                """,
+                (cleaned_name, cleaned_address, cleaned_contact),
+            )
+            return int(cursor.lastrowid)
+    except sqlite3.IntegrityError as error:
+        message = f"A service center named '{cleaned_name}' already exists."
+        raise RuntimeError(message) from error
+    except sqlite3.Error as error:
+        message = f"Failed to create service center '{cleaned_name}': {error}"
+        raise RuntimeError(message) from error
+
+
+def update_service_center(
+    db_path: str,
+    service_center_id: int,
+    name: str,
+    address: str = "",
+    contact_no: str = "",
+) -> None:
+    """Update a service center's name, address, and contact number."""
+    existing = fetch_service_center_by_id(db_path, service_center_id)
+    if not existing:
+        raise RuntimeError("Service center not found.")
+    cleaned_name, cleaned_address, cleaned_contact = _clean_service_center_fields(
+        name, address, contact_no
+    )
+    try:
+        with get_connection(db_path) as connection:
+            connection.execute(
+                """
+                UPDATE service_centers
+                SET name = ?, address = ?, contact_no = ?
+                WHERE id = ?
+                """,
+                (cleaned_name, cleaned_address, cleaned_contact, service_center_id),
+            )
+    except sqlite3.IntegrityError as error:
+        message = f"A service center named '{cleaned_name}' already exists."
+        raise RuntimeError(message) from error
+    except sqlite3.Error as error:
+        message = f"Failed to update service center {service_center_id}: {error}"
+        raise RuntimeError(message) from error
+
+
+def soft_delete_service_center(db_path: str, service_center_id: int) -> None:
+    """Deactivate a service center. Master rows are never hard-deleted."""
+    existing = fetch_service_center_by_id(db_path, service_center_id)
+    if not existing:
+        raise RuntimeError("Service center not found.")
+    try:
+        with get_connection(db_path) as connection:
+            connection.execute(
+                "UPDATE service_centers SET is_active = 0 WHERE id = ?",
+                (service_center_id,),
+            )
+    except sqlite3.Error as error:
+        message = f"Failed to deactivate service center {service_center_id}: {error}"
+        raise RuntimeError(message) from error
+
+
+def reactivate_service_center(db_path: str, service_center_id: int) -> None:
+    """Reactivate a deactivated service center."""
+    existing = fetch_service_center_by_id(db_path, service_center_id)
+    if not existing:
+        raise RuntimeError("Service center not found.")
+    try:
+        with get_connection(db_path) as connection:
+            connection.execute(
+                "UPDATE service_centers SET is_active = 1 WHERE id = ?",
+                (service_center_id,),
+            )
+    except sqlite3.Error as error:
+        message = f"Failed to reactivate service center {service_center_id}: {error}"
+        raise RuntimeError(message) from error
+
+
 def list_vendors(db_path: str) -> List[Dict[str, Any]]:
     """
     List active vendors.
@@ -3518,6 +4204,9 @@ def list_cars(db_path: str) -> List[Dict[str, Any]]:
                     c.fuel_type,
                     c.company,
                     c.assigned_to,
+                    c.registration_date,
+                    c.lto_expiry,
+                    c.is_company_owned,
                     v.name AS vendor_name,
                     c.is_active,
                     c.created_at
@@ -3527,7 +4216,13 @@ def list_cars(db_path: str) -> List[Dict[str, Any]]:
                 ORDER BY c.plate_number
                 """
             )
-            return [dict(row) for row in cursor.fetchall()]
+            rows = []
+            for row in cursor.fetchall():
+                item = dict(row)
+                item["is_company_owned"] = bool(item.get("is_company_owned"))
+                item["expiration_date"] = item.get("lto_expiry")
+                rows.append(item)
+            return rows
     except sqlite3.Error as error:
         message = f"Failed to list cars: {error}"
         raise RuntimeError(message) from error
@@ -3541,6 +4236,9 @@ def upsert_car(
     fuel_type: Optional[str] = None,
     company: Optional[str] = None,
     assigned_to: Optional[str] = None,
+    registration_date: Optional[str] = None,
+    expiration_date: Optional[str] = None,
+    is_company_owned: bool = False,
 ) -> int:
     """
     Insert a new car or reactivate/update an existing one by plate number.
@@ -3556,6 +4254,9 @@ def upsert_car(
         fuel_type: Optional fuel type (Diesel, Unleaded Gasoline, Premium Gasoline).
         company: Optional company name.
         assigned_to: Person assigned to the vehicle (required).
+        registration_date: Optional registration date (YYYY-MM-DD); cleared if not company-owned.
+        expiration_date: Optional LTO expiry (YYYY-MM-DD); cleared if not company-owned.
+        is_company_owned: When True, vehicle is included in Registrations/Renewal tracking.
 
     Returns:
         The car id.
@@ -3566,6 +4267,11 @@ def upsert_car(
     assignee = (assigned_to or "").strip()
     if not assignee:
         raise RuntimeError("Assigned To is required.")
+
+    owned = bool(is_company_owned)
+    reg_date = _normalize_optional_iso_date(registration_date) if owned else None
+    exp_date = _normalize_optional_iso_date(expiration_date) if owned else None
+    owned_flag = 1 if owned else 0
 
     try:
         plate_number = normalize_plate_number(plate_number)
@@ -3585,21 +4291,44 @@ def upsert_car(
                     """
                     UPDATE cars
                     SET plate_number = ?, model = ?, vendor_id = ?, fuel_type = ?, company = ?,
-                        assigned_to = ?, is_active = 1
+                        assigned_to = ?, registration_date = ?, lto_expiry = ?,
+                        is_company_owned = ?, is_active = 1
                     WHERE id = ?
                     """,
-                    (plate_number, model, vendor_id, fuel_type, company, assignee, car_id),
+                    (
+                        plate_number,
+                        model,
+                        vendor_id,
+                        fuel_type,
+                        company,
+                        assignee,
+                        reg_date,
+                        exp_date,
+                        owned_flag,
+                        car_id,
+                    ),
                 )
                 return car_id
 
             cursor = connection.execute(
                 """
                 INSERT INTO cars (
-                    plate_number, model, vendor_id, fuel_type, company, assigned_to, is_active
+                    plate_number, model, vendor_id, fuel_type, company, assigned_to,
+                    registration_date, lto_expiry, is_company_owned, is_active
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 1)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """,
-                (plate_number, model, vendor_id, fuel_type, company, assignee),
+                (
+                    plate_number,
+                    model,
+                    vendor_id,
+                    fuel_type,
+                    company,
+                    assignee,
+                    reg_date,
+                    exp_date,
+                    owned_flag,
+                ),
             )
             return int(cursor.lastrowid)
     except sqlite3.IntegrityError as error:
@@ -3619,6 +4348,9 @@ def update_car(
     fuel_type: Optional[str] = None,
     company: Optional[str] = None,
     assigned_to: Optional[str] = None,
+    registration_date: Optional[str] = None,
+    expiration_date: Optional[str] = None,
+    is_company_owned: bool = False,
 ) -> None:
     """
     Update an existing car by ID.
@@ -3635,6 +4367,9 @@ def update_car(
         fuel_type: Updated optional fuel type (Diesel, Unleaded Gasoline, Premium Gasoline).
         company: Updated company name.
         assigned_to: Person assigned to the vehicle (required).
+        registration_date: Optional registration date (YYYY-MM-DD); cleared if not company-owned.
+        expiration_date: Optional LTO expiry (YYYY-MM-DD); cleared if not company-owned.
+        is_company_owned: When True, vehicle is included in Registrations/Renewal tracking.
 
     Raises:
         RuntimeError: If assigned_to is missing, plate invalid, or DB operation fails.
@@ -3642,6 +4377,11 @@ def update_car(
     assignee = (assigned_to or "").strip()
     if not assignee:
         raise RuntimeError("Assigned To is required.")
+
+    owned = bool(is_company_owned)
+    reg_date = _normalize_optional_iso_date(registration_date) if owned else None
+    exp_date = _normalize_optional_iso_date(expiration_date) if owned else None
+    owned_flag = 1 if owned else 0
 
     try:
         plate_number = normalize_plate_number(plate_number)
@@ -3661,10 +4401,22 @@ def update_car(
                 """
                 UPDATE cars
                 SET plate_number = ?, model = ?, vendor_id = ?, fuel_type = ?,
-                    company = ?, assigned_to = ?
+                    company = ?, assigned_to = ?, registration_date = ?,
+                    lto_expiry = ?, is_company_owned = ?
                 WHERE id = ?
                 """,
-                (plate_number, model, vendor_id, fuel_type, company, assignee, car_id),
+                (
+                    plate_number,
+                    model,
+                    vendor_id,
+                    fuel_type,
+                    company,
+                    assignee,
+                    reg_date,
+                    exp_date,
+                    owned_flag,
+                    car_id,
+                ),
             )
     except RuntimeError:
         raise
@@ -3707,7 +4459,7 @@ def list_users(db_path: str) -> List[Dict[str, Any]]:
             connection.row_factory = sqlite3.Row
             cursor = connection.execute(
                 """
-                SELECT id, username, role, is_active, created_at, full_name, email, company
+                SELECT id, username, role, is_active, created_at, full_name, email, company, permissions
                 FROM users
                 ORDER BY username
                 """
@@ -3726,6 +4478,7 @@ def create_user(
     full_name: Optional[str] = None,
     email: Optional[str] = None,
     company: Optional[str] = None,
+    permissions: Optional[str] = None,
 ) -> int:
     """
     Create a new user.
@@ -3738,6 +4491,7 @@ def create_user(
         full_name: Full name of the user (required).
         email: Optional email (for password reset).
         company: Optional company scope for encoder accounts.
+        permissions: Optional JSON array of explicit permission codes.
 
     Returns:
         The new user ID.
@@ -3749,8 +4503,8 @@ def create_user(
         with get_connection(db_path) as connection:
             cursor = connection.execute(
                 """
-                INSERT INTO users (username, hashed_password, role, is_active, full_name, email, company)
-                VALUES (?, ?, ?, 1, ?, ?, ?)
+                INSERT INTO users (username, hashed_password, role, is_active, full_name, email, company, permissions)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?)
                 """,
                 (
                     username,
@@ -3759,6 +4513,7 @@ def create_user(
                     full_name.strip(),
                     (email or "").strip() or None,
                     (company or "").strip() or None,
+                    (permissions or "").strip() or None,
                 ),
             )
             return int(cursor.lastrowid)
@@ -3779,6 +4534,7 @@ def update_user(
     full_name: Optional[str] = None,
     email: Optional[str] = None,
     company: Optional[str] = None,
+    permissions: Optional[str] = None,
 ) -> None:
     """
     Update user fields (username, role, password, full_name, email, or company).
@@ -3816,6 +4572,9 @@ def update_user(
             if company is not None:
                 updates.append("company = ?")
                 params.append((company or "").strip() or None)
+            if permissions is not None:
+                updates.append("permissions = ?")
+                params.append((permissions or "").strip() or None)
             if not updates:
                 return
             params.append(user_id)
@@ -4172,6 +4931,7 @@ def list_audit_log(
     entity_type: Optional[str] = None,
     entity_id: Optional[int] = None,
     limit: int = 100,
+    q: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     List audit log entries newest first.
@@ -4181,6 +4941,7 @@ def list_audit_log(
         entity_type: Optional filter by entity type.
         entity_id: Optional filter by entity id.
         limit: Maximum rows (default 100).
+        q: Optional search across request id, PO number, plate, and requestor name.
 
     Returns:
         Audit log rows as dicts with parsed JSON fields.
@@ -4190,11 +4951,54 @@ def list_audit_log(
     clauses = []
     params: List[Any] = []
     if entity_type:
-        clauses.append("entity_type = ?")
+        clauses.append("a.entity_type = ?")
         params.append(entity_type)
     if entity_id is not None:
-        clauses.append("entity_id = ?")
+        clauses.append("a.entity_id = ?")
         params.append(entity_id)
+    needle = (q or "").strip().upper()
+    if needle:
+        like = f"%{needle}%"
+        clauses.append(
+            """
+            (
+                (
+                    a.entity_type = 'requisition'
+                    AND a.entity_id IN (
+                        SELECT r.id
+                        FROM requisitions r
+                        LEFT JOIN cars c ON c.id = r.vehicle_id
+                        WHERE UPPER(CAST(r.id AS TEXT)) LIKE ?
+                           OR UPPER(COALESCE(r.serial_number, '')) LIKE ?
+                           OR UPPER(COALESCE(r.po_reference, '')) LIKE ?
+                           OR UPPER(COALESCE(c.plate_number, '')) LIKE ?
+                           OR UPPER(COALESCE(r.requestor_name, '')) LIKE ?
+                    )
+                )
+                OR (
+                    a.entity_type = 'vehicle'
+                    AND a.entity_id IN (
+                        SELECT c.id
+                        FROM cars c
+                        WHERE UPPER(COALESCE(c.plate_number, '')) LIKE ?
+                    )
+                )
+                OR UPPER(COALESCE(json_extract(a.new_values, '$.serial_number'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.old_values, '$.serial_number'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.new_values, '$.po_reference'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.old_values, '$.po_reference'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.new_values, '$.plate_number'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.old_values, '$.plate_number'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.new_values, '$.requestor_name'), '')) LIKE ?
+                OR UPPER(COALESCE(json_extract(a.old_values, '$.requestor_name'), '')) LIKE ?
+                OR (
+                    a.entity_type = 'requisition'
+                    AND UPPER(CAST(a.entity_id AS TEXT)) LIKE ?
+                )
+            )
+            """
+        )
+        params.extend([like] * 15)
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     params.append(max(1, min(limit, 500)))
 
@@ -4204,21 +5008,21 @@ def list_audit_log(
             cursor = connection.execute(
                 f"""
                 SELECT
-                    id,
-                    entity_type,
-                    entity_id,
-                    action,
-                    actor_user_id,
-                    actor_username,
-                    actor_role,
-                    actor_name,
-                    old_values,
-                    new_values,
-                    metadata,
-                    created_at
-                FROM audit_log
+                    a.id,
+                    a.entity_type,
+                    a.entity_id,
+                    a.action,
+                    a.actor_user_id,
+                    a.actor_username,
+                    a.actor_role,
+                    a.actor_name,
+                    a.old_values,
+                    a.new_values,
+                    a.metadata,
+                    a.created_at
+                FROM audit_log a
                 {where_sql}
-                ORDER BY created_at DESC, id DESC
+                ORDER BY a.created_at DESC, a.id DESC
                 LIMIT ?
                 """,
                 params,
@@ -4266,16 +5070,1210 @@ def fetch_car_by_id(db_path: str, car_id: int) -> Optional[Dict[str, Any]]:
             cursor = connection.execute(
                 """
                 SELECT id, plate_number, model, vendor_id, fuel_type, company,
-                       assigned_to, is_active, created_at
+                       assigned_to, is_active, created_at,
+                       registration_date, lto_expiry, is_company_owned,
+                       or_number, cr_number, mv_file_no,
+                       registration_remarks
                 FROM cars WHERE id = ?
                 """,
                 (car_id,),
             )
             row = cursor.fetchone()
-            return dict(row) if row else None
+            if not row:
+                return None
+            item = dict(row)
+            item["is_company_owned"] = bool(item.get("is_company_owned"))
+            item["expiration_date"] = item.get("lto_expiry")
+            return item
     except sqlite3.Error as error:
         message = f"Failed to fetch car {car_id}: {error}"
         raise RuntimeError(message) from error
+
+
+def list_vehicle_registrations(db_path: str) -> List[Dict[str, Any]]:
+    """
+    List active company-owned vehicles with LTO / OR-CR fields and alert status.
+
+    Non–company-owned vehicles are excluded (renewals are tracked only for owned fleet).
+
+    Sort order: expired, due_soon, missing, current; then by expiry and plate.
+
+    Args:
+        db_path: File system path to the SQLite database.
+
+    Returns:
+        List of registration rows including alert_status and days_until_expiry.
+    """
+    status_rank = {"expired": 0, "due_soon": 1, "missing": 2, "current": 3}
+    today = date.today()
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                """
+                SELECT
+                    c.id,
+                    c.plate_number,
+                    c.model,
+                    c.company,
+                    c.assigned_to,
+                    c.registration_date,
+                    c.lto_expiry,
+                    c.or_number,
+                    c.cr_number,
+                    c.mv_file_no,
+                    c.registration_remarks,
+                    c.is_company_owned
+                FROM cars c
+                WHERE c.is_active = 1
+                  AND IFNULL(c.is_company_owned, 0) = 1
+                ORDER BY c.plate_number
+                """
+            )
+            rows: List[Dict[str, Any]] = []
+            for row in cursor.fetchall():
+                item = dict(row)
+                item["is_company_owned"] = True
+                item["expiration_date"] = item.get("lto_expiry")
+                expiry = item.get("lto_expiry")
+                item["alert_status"] = registration_alert_status(expiry, today=today)
+                item["days_until_expiry"] = days_until_lto_expiry(expiry, today=today)
+                rows.append(item)
+            rows.sort(
+                key=lambda r: (
+                    status_rank.get(str(r.get("alert_status")), 99),
+                    r.get("lto_expiry") or "9999-99-99",
+                    r.get("plate_number") or "",
+                )
+            )
+            return rows
+    except sqlite3.Error as error:
+        message = f"Failed to list vehicle registrations: {error}"
+        raise RuntimeError(message) from error
+
+
+def update_vehicle_registration(
+    db_path: str,
+    car_id: int,
+    lto_expiry: Optional[str] = None,
+    registration_date: Optional[str] = None,
+    or_number: Optional[str] = None,
+    cr_number: Optional[str] = None,
+    mv_file_no: Optional[str] = None,
+    registration_remarks: Optional[str] = None,
+) -> None:
+    """
+    Update LTO / OR-CR registration fields for an active company-owned vehicle.
+
+    Args:
+        db_path: File system path to the SQLite database.
+        car_id: Vehicle id to update.
+        lto_expiry: Optional LTO registration expiry (YYYY-MM-DD).
+        registration_date: Optional registration date (YYYY-MM-DD).
+        or_number: Optional Official Receipt number.
+        cr_number: Optional Certificate of Registration number.
+        mv_file_no: Optional MV file number.
+        registration_remarks: Optional free-text notes.
+
+    Raises:
+        RuntimeError: If the vehicle is missing/inactive/not company-owned or validation fails.
+    """
+    expiry = _normalize_optional_iso_date(lto_expiry)
+    reg_date = _normalize_optional_iso_date(registration_date)
+    or_val = _normalize_optional_text(or_number)
+    cr_val = _normalize_optional_text(cr_number)
+    mv_val = _normalize_optional_text(mv_file_no)
+    remarks = _normalize_optional_text(registration_remarks)
+
+    try:
+        with get_connection(db_path) as connection:
+            cursor = connection.execute(
+                """
+                SELECT id, is_active, IFNULL(is_company_owned, 0)
+                FROM cars WHERE id = ?
+                """,
+                (car_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"Vehicle id {car_id} not found.")
+            if int(row[1]) != 1:
+                raise RuntimeError(f"Vehicle id {car_id} is inactive.")
+            if int(row[2]) != 1:
+                raise RuntimeError(
+                    "Only company-owned vehicles are tracked for registration renewals."
+                )
+
+            connection.execute(
+                """
+                UPDATE cars
+                SET lto_expiry = ?,
+                    registration_date = ?,
+                    or_number = ?,
+                    cr_number = ?,
+                    mv_file_no = ?,
+                    registration_remarks = ?
+                WHERE id = ?
+                """,
+                (expiry, reg_date, or_val, cr_val, mv_val, remarks, car_id),
+            )
+    except RuntimeError:
+        raise
+    except sqlite3.Error as error:
+        message = f"Failed to update registration for vehicle id {car_id}: {error}"
+        raise RuntimeError(message) from error
+
+
+# Days before the next PMS due date that count as "due soon".
+PMS_DUE_SOON_DAYS = 30
+
+PMS_JOB_TYPE = "pms"
+PMS_STATUS_OPEN = "open"
+PMS_STATUS_COMPLETED = "completed"
+PMS_STATUS_CANCELLED = "cancelled"
+
+PMS_REPAIR_TYPES = ("preventive_maintenance", "change_oil", "inspection")
+PMS_TERMS = ("cash", "15_days", "30_days")
+PMS_LINE_TYPES = ("parts", "lubricants", "services", "others")
+PMS_LINE_UNITS = ("pcs", "liters", "lot", "job")
+
+PMS_REPAIR_TYPE_LABELS = {
+    "preventive_maintenance": "Preventive maintenance",
+    "change_oil": "Change oil",
+    "inspection": "Inspection",
+}
+
+
+def _ensure_pms_tables(connection: sqlite3.Connection) -> None:
+    """
+    Create PMS schedule and work-order tables if missing.
+
+    interval_km and last_odometer_km are edited on the schedule form.
+    Date alerts do not use them. odometer_km on a work order stores that job's reading.
+    """
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pms_schedules (
+            vehicle_id INTEGER PRIMARY KEY,
+            interval_months INTEGER,
+            next_due_date TEXT,
+            interval_km INTEGER,
+            last_odometer_km INTEGER,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (vehicle_id) REFERENCES cars (id)
+        );
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vehicle_id INTEGER NOT NULL,
+            job_type TEXT NOT NULL DEFAULT 'pms',
+            status TEXT NOT NULL DEFAULT 'open',
+            description TEXT,
+            shop_name TEXT,
+            cost REAL,
+            notes TEXT,
+            opened_at TEXT NOT NULL,
+            service_date TEXT,
+            completed_at TEXT,
+            completed_by_user_id INTEGER,
+            odometer_km INTEGER,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (vehicle_id) REFERENCES cars (id),
+            FOREIGN KEY (completed_by_user_id) REFERENCES users (id)
+        );
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_work_orders_one_open_pms
+        ON work_orders (vehicle_id)
+        WHERE job_type = 'pms' AND status = 'open';
+        """
+    )
+    cursor = connection.execute("PRAGMA table_info(work_orders);")
+    columns = {row[1] for row in cursor.fetchall()}
+    for column_name, column_type in (
+        ("transaction_no", "TEXT"),
+        ("doc_date", "TEXT"),
+        ("repair_type", "TEXT"),
+        ("service_advisor", "TEXT"),
+        ("technician", "TEXT"),
+        ("terms", "TEXT"),
+        ("previous_odometer", "INTEGER"),
+        ("current_odometer", "INTEGER"),
+        ("remarks", "TEXT"),
+    ):
+        if column_name in columns:
+            continue
+        connection.execute(
+            f"ALTER TABLE work_orders ADD COLUMN {column_name} {column_type};"
+        )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_work_orders_transaction_no
+        ON work_orders (transaction_no)
+        WHERE transaction_no IS NOT NULL AND TRIM(transaction_no) != '';
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_order_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_order_id INTEGER NOT NULL,
+            line_no INTEGER NOT NULL,
+            part_code TEXT,
+            line_type TEXT NOT NULL,
+            description TEXT NOT NULL,
+            unit TEXT NOT NULL,
+            quantity REAL NOT NULL,
+            unit_price REAL NOT NULL,
+            discount REAL NOT NULL DEFAULT 0,
+            total_amount REAL NOT NULL,
+            FOREIGN KEY (work_order_id) REFERENCES work_orders (id)
+        );
+        """
+    )
+    connection.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_work_order_lines_number
+        ON work_order_lines (work_order_id, line_no);
+        """
+    )
+
+
+def add_calendar_months(value: date, months: int) -> date:
+    """
+    Add a positive number of calendar months, clamping the day to the month length.
+
+    Args:
+        value: Starting calendar date.
+        months: Months to add (must be at least 1).
+
+    Returns:
+        The date that many months later.
+    """
+    if months < 1:
+        raise RuntimeError("Interval months must be at least 1.")
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(value.day, last_day))
+
+
+def pms_alert_status(
+    next_due_date: Optional[str],
+    today: Optional[date] = None,
+    due_soon_days: int = PMS_DUE_SOON_DAYS,
+) -> str:
+    """
+    Classify a PMS next-due date.
+
+    Returns one of: missing, overdue, due_soon, current.
+    """
+    as_of = today or date.today()
+    if not next_due_date or not str(next_due_date).strip():
+        return "missing"
+    try:
+        due = date.fromisoformat(str(next_due_date).strip())
+    except ValueError:
+        return "missing"
+    if due < as_of:
+        return "overdue"
+    if due <= as_of + timedelta(days=due_soon_days):
+        return "due_soon"
+    return "current"
+
+
+def days_until_pms_due(
+    next_due_date: Optional[str],
+    today: Optional[date] = None,
+) -> Optional[int]:
+    """Return days until the PMS due date (negative if past), or None if missing."""
+    if not next_due_date or not str(next_due_date).strip():
+        return None
+    try:
+        due = date.fromisoformat(str(next_due_date).strip())
+    except ValueError:
+        return None
+    as_of = today or date.today()
+    return (due - as_of).days
+
+
+def _normalize_optional_positive_int(value: Optional[int], label: str) -> Optional[int]:
+    """Blank clears; a present value must be an integer of at least 1."""
+    if value is None:
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(f"{label} must be a whole number.") from error
+    if number < 1:
+        raise RuntimeError(f"{label} must be at least 1.")
+    return number
+
+
+def _normalize_optional_cost(value: Optional[float]) -> Optional[float]:
+    """Blank cost is allowed; a present cost must be zero or greater."""
+    if value is None:
+        return None
+    try:
+        amount = float(value)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("Cost must be a number.") from error
+    if amount < 0:
+        raise RuntimeError("Cost cannot be negative.")
+    return amount
+
+
+def _require_pms_vehicle(connection: sqlite3.Connection, vehicle_id: int) -> None:
+    """Raise if the vehicle is missing, inactive, or not company-owned."""
+    cursor = connection.execute(
+        """
+        SELECT id, is_active, IFNULL(is_company_owned, 0)
+        FROM cars WHERE id = ?
+        """,
+        (vehicle_id,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError(f"Vehicle id {vehicle_id} not found.")
+    if int(row[1]) != 1:
+        raise RuntimeError(f"Vehicle id {vehicle_id} is inactive.")
+    if int(row[2]) != 1:
+        raise RuntimeError("Only company-owned vehicles are tracked for PMS.")
+
+
+def _pms_schedule_snapshot(connection: sqlite3.Connection, vehicle_id: int) -> Dict[str, Any]:
+    """Return schedule fields for audit, or an empty snapshot when no row exists."""
+    connection.row_factory = sqlite3.Row
+    cursor = connection.execute(
+        """
+        SELECT vehicle_id, interval_months, next_due_date, interval_km, last_odometer_km
+        FROM pms_schedules
+        WHERE vehicle_id = ?
+        """,
+        (vehicle_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return {
+            "vehicle_id": vehicle_id,
+            "interval_months": None,
+            "next_due_date": None,
+            "interval_km": None,
+            "last_odometer_km": None,
+        }
+    return dict(row)
+
+
+def list_pms_vehicles(db_path: str) -> List[Dict[str, Any]]:
+    """
+    List active company-owned vehicles with PMS due status and any open job.
+
+    Sort order: overdue, due_soon, missing, current; then next due date and plate.
+
+    Args:
+        db_path: SQLite database path.
+
+    Returns:
+        Vehicle rows with alert_status, days_until_due, and open work-order fields.
+    """
+    status_rank = {"overdue": 0, "due_soon": 1, "missing": 2, "current": 3}
+    today = date.today()
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                """
+                SELECT
+                    c.id,
+                    c.plate_number,
+                    c.model,
+                    c.company,
+                    c.assigned_to,
+                    s.interval_months,
+                    s.next_due_date,
+                    s.interval_km,
+                    s.last_odometer_km,
+                    (
+                        SELECT w.service_date
+                        FROM work_orders w
+                        WHERE w.vehicle_id = c.id
+                          AND w.job_type = ?
+                          AND w.status = ?
+                        ORDER BY w.service_date DESC, w.id DESC
+                        LIMIT 1
+                    ) AS last_service_date,
+                    (
+                        SELECT w.id
+                        FROM work_orders w
+                        WHERE w.vehicle_id = c.id
+                          AND w.job_type = ?
+                          AND w.status = ?
+                        LIMIT 1
+                    ) AS open_work_order_id,
+                    (
+                        SELECT COALESCE(
+                            NULLIF(TRIM(w.transaction_no), ''),
+                            NULLIF(TRIM(w.description), ''),
+                            w.repair_type
+                        )
+                        FROM work_orders w
+                        WHERE w.vehicle_id = c.id
+                          AND w.job_type = ?
+                          AND w.status = ?
+                        LIMIT 1
+                    ) AS open_work_order_description,
+                    (
+                        SELECT w.current_odometer
+                        FROM work_orders w
+                        WHERE w.vehicle_id = c.id
+                          AND w.job_type = ?
+                          AND w.status = ?
+                          AND w.current_odometer IS NOT NULL
+                        ORDER BY w.service_date DESC, w.id DESC
+                        LIMIT 1
+                    ) AS previous_odometer
+                FROM cars c
+                LEFT JOIN pms_schedules s ON s.vehicle_id = c.id
+                WHERE c.is_active = 1
+                  AND IFNULL(c.is_company_owned, 0) = 1
+                ORDER BY c.plate_number
+                """,
+                (
+                    PMS_JOB_TYPE,
+                    PMS_STATUS_COMPLETED,
+                    PMS_JOB_TYPE,
+                    PMS_STATUS_OPEN,
+                    PMS_JOB_TYPE,
+                    PMS_STATUS_OPEN,
+                    PMS_JOB_TYPE,
+                    PMS_STATUS_COMPLETED,
+                ),
+            )
+            rows: List[Dict[str, Any]] = []
+            for row in cursor.fetchall():
+                item = dict(row)
+                due = item.get("next_due_date")
+                item["alert_status"] = pms_alert_status(due, today=today)
+                item["days_until_due"] = days_until_pms_due(due, today=today)
+                rows.append(item)
+            rows.sort(
+                key=lambda r: (
+                    status_rank.get(str(r.get("alert_status")), 99),
+                    r.get("next_due_date") or "9999-99-99",
+                    r.get("plate_number") or "",
+                )
+            )
+            return rows
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to list PMS vehicles: {error}") from error
+
+
+def update_pms_schedule(
+    db_path: str,
+    vehicle_id: int,
+    interval_months: Optional[int],
+    next_due_date: Optional[str],
+    interval_km: Optional[int] = None,
+    last_odometer_km: Optional[int] = None,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    Set or clear the date and odometer schedule for one vehicle.
+
+    Blank values clear that field. Due status still follows the next due date.
+
+    Args:
+        db_path: SQLite database path.
+        vehicle_id: Company-owned vehicle id.
+        interval_months: Months between services, or None to clear.
+        next_due_date: Next due date (YYYY-MM-DD), or None to clear.
+        interval_km: Kilometers between services, or None to clear.
+        last_odometer_km: Last odometer reading, or None to clear.
+
+    Returns:
+        Before and after schedule snapshots.
+
+    Raises:
+        RuntimeError: If the vehicle is not tracked or the values are invalid.
+    """
+    months = _normalize_optional_positive_int(interval_months, "Interval months")
+    due = _normalize_optional_iso_date(next_due_date, "Next due date")
+    kilometers = _normalize_optional_positive_int(interval_km, "Interval kilometers")
+    odometer = _normalize_optional_odometer(last_odometer_km, "Last odometer")
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            _require_pms_vehicle(connection, vehicle_id)
+            before = _pms_schedule_snapshot(connection, vehicle_id)
+            connection.execute(
+                """
+                INSERT INTO pms_schedules (
+                    vehicle_id, interval_months, next_due_date,
+                    interval_km, last_odometer_km, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(vehicle_id) DO UPDATE SET
+                    interval_months = excluded.interval_months,
+                    next_due_date = excluded.next_due_date,
+                    interval_km = excluded.interval_km,
+                    last_odometer_km = excluded.last_odometer_km,
+                    updated_at = excluded.updated_at
+                """,
+                (vehicle_id, months, due, kilometers, odometer, timestamp),
+            )
+            after = _pms_schedule_snapshot(connection, vehicle_id)
+            return before, after
+    except RuntimeError:
+        raise
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to update PMS schedule for vehicle {vehicle_id}: {error}") from error
+
+
+def _work_order_select() -> str:
+    """Shared SELECT for PMS work-order rows with vehicle and completer name."""
+    return """
+        SELECT
+            w.id,
+            w.vehicle_id,
+            w.job_type,
+            w.status,
+            w.description,
+            w.shop_name,
+            w.cost,
+            w.notes,
+            w.remarks,
+            w.opened_at,
+            w.service_date,
+            w.doc_date,
+            w.transaction_no,
+            w.repair_type,
+            w.service_advisor,
+            w.technician,
+            w.terms,
+            w.previous_odometer,
+            w.current_odometer,
+            w.completed_at,
+            w.completed_by_user_id,
+            w.odometer_km,
+            c.plate_number,
+            c.model,
+            c.company,
+            c.assigned_to,
+            COALESCE(NULLIF(TRIM(u.full_name), ''), u.username) AS completed_by_name
+        FROM work_orders w
+        INNER JOIN cars c ON c.id = w.vehicle_id
+        LEFT JOIN users u ON u.id = w.completed_by_user_id
+    """
+
+
+def _load_work_order_lines(
+    connection: sqlite3.Connection, work_order_ids: List[int]
+) -> Dict[int, List[Dict[str, Any]]]:
+    """Return line rows grouped by work order id, in line number order."""
+    if not work_order_ids:
+        return {}
+    placeholders = ",".join("?" for _ in work_order_ids)
+    connection.row_factory = sqlite3.Row
+    cursor = connection.execute(
+        f"""
+        SELECT id, work_order_id, line_no, part_code, line_type, description,
+               unit, quantity, unit_price, discount, total_amount
+        FROM work_order_lines
+        WHERE work_order_id IN ({placeholders})
+        ORDER BY line_no, id
+        """,
+        work_order_ids,
+    )
+    grouped: Dict[int, List[Dict[str, Any]]] = {}
+    for row in cursor.fetchall():
+        item = dict(row)
+        grouped.setdefault(int(item["work_order_id"]), []).append(item)
+    return grouped
+
+
+def _attach_work_order_lines(
+    connection: sqlite3.Connection, orders: List[Dict[str, Any]]
+) -> None:
+    """Add a lines list to each work-order dict."""
+    grouped = _load_work_order_lines(connection, [int(order["id"]) for order in orders])
+    for order in orders:
+        order["lines"] = grouped.get(int(order["id"]), [])
+
+
+def _latest_completed_odometer(connection: sqlite3.Connection, vehicle_id: int) -> Optional[int]:
+    """Return the current odometer from the latest completed PMS job, if any."""
+    cursor = connection.execute(
+        """
+        SELECT current_odometer
+        FROM work_orders
+        WHERE vehicle_id = ?
+          AND job_type = ?
+          AND status = ?
+          AND current_odometer IS NOT NULL
+        ORDER BY service_date DESC, id DESC
+        LIMIT 1
+        """,
+        (vehicle_id, PMS_JOB_TYPE, PMS_STATUS_COMPLETED),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    return int(row[0])
+
+
+def _normalize_optional_odometer(value: Optional[int], label: str) -> Optional[int]:
+    """Blank clears. A present reading must be a whole number of zero or greater."""
+    if value is None or value == "":
+        return None
+    try:
+        if isinstance(value, float) and not value.is_integer():
+            raise ValueError
+        number = int(value)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(f"{label} must be a whole number.") from error
+    if number < 0:
+        raise RuntimeError(f"{label} cannot be negative.")
+    return number
+
+
+def _normalize_choice(value: Optional[str], allowed: tuple, label: str) -> Optional[str]:
+    """Blank clears. Any other value must be one of the allowed codes."""
+    text = _normalize_optional_text(value)
+    if text is None:
+        return None
+    if text not in allowed:
+        raise RuntimeError(f"{label} is not recognized.")
+    return text
+
+
+def _prepare_pms_lines(lines: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], float]:
+    """
+    Validate line items and assign line numbers.
+
+    Returns:
+        Normalized lines and the job total.
+    """
+    prepared: List[Dict[str, Any]] = []
+    job_total = 0.0
+    for raw in lines:
+        description = _normalize_optional_text(raw.get("description"))
+        if not description:
+            raise RuntimeError("Each line needs a description.")
+        line_type = _normalize_choice(raw.get("line_type"), PMS_LINE_TYPES, "Line type")
+        if not line_type:
+            raise RuntimeError("Each line needs a type.")
+        unit = _normalize_choice(raw.get("unit"), PMS_LINE_UNITS, "Unit")
+        if not unit:
+            raise RuntimeError("Each line needs a unit.")
+        try:
+            quantity = float(raw.get("quantity"))
+            unit_price = float(raw.get("unit_price"))
+            discount = float(raw.get("discount") or 0)
+        except (TypeError, ValueError) as error:
+            raise RuntimeError("Quantity, unit price, and discount must be numbers.") from error
+        if quantity <= 0:
+            raise RuntimeError("Quantity must be greater than zero.")
+        if unit_price < 0:
+            raise RuntimeError("Unit price cannot be negative.")
+        if discount < 0:
+            raise RuntimeError("Discount cannot be negative.")
+        gross = round(quantity * unit_price, 2)
+        discount = round(discount, 2)
+        if discount > gross:
+            raise RuntimeError("Discount cannot be greater than quantity times unit price.")
+        total_amount = round(gross - discount, 2)
+        job_total = round(job_total + total_amount, 2)
+        prepared.append(
+            {
+                "line_no": len(prepared) + 1,
+                "part_code": _normalize_optional_text(raw.get("part_code")),
+                "line_type": line_type,
+                "description": description,
+                "unit": unit,
+                "quantity": quantity,
+                "unit_price": round(unit_price, 2),
+                "discount": discount,
+                "total_amount": total_amount,
+            }
+        )
+    return prepared, job_total
+
+
+def _prepare_pms_header(
+    header: Dict[str, Any],
+    lines: List[Dict[str, Any]],
+    previous_odometer: Optional[int],
+    strict: bool,
+) -> Dict[str, Any]:
+    """
+    Normalize a PMS job header.
+
+    Strict mode is completion: repair type, doc date, current odometer, and one line.
+    """
+    prepared_lines, job_total = _prepare_pms_lines(lines)
+    repair_type = _normalize_choice(header.get("repair_type"), PMS_REPAIR_TYPES, "Repair type")
+    doc_date = _normalize_optional_iso_date(header.get("doc_date"), "Doc. date")
+    current = _normalize_optional_odometer(header.get("current_odometer"), "Current odometer")
+    if strict:
+        if not repair_type:
+            raise RuntimeError("Repair type is required to complete the job.")
+        if not doc_date:
+            raise RuntimeError("Doc. date is required to complete the job.")
+        if current is None:
+            raise RuntimeError("Current odometer is required to complete the job.")
+        if not prepared_lines:
+            raise RuntimeError("Add at least one parts or service line to complete the job.")
+    if current is not None and previous_odometer is not None and current <= previous_odometer:
+        raise RuntimeError("Current odometer must be greater than the previous reading.")
+    summary = ""
+    if prepared_lines:
+        summary = prepared_lines[0]["description"]
+    elif repair_type:
+        summary = PMS_REPAIR_TYPE_LABELS.get(repair_type, repair_type)
+    remarks = _normalize_optional_text(header.get("remarks"))
+    return {
+        "transaction_no": _normalize_optional_text(header.get("transaction_no")),
+        "doc_date": doc_date,
+        "repair_type": repair_type,
+        "service_advisor": _normalize_optional_text(header.get("service_advisor")),
+        "technician": _normalize_optional_text(header.get("technician")),
+        "terms": _normalize_choice(header.get("terms"), PMS_TERMS, "Terms"),
+        "shop_name": _normalize_optional_text(header.get("shop_name")),
+        "remarks": remarks,
+        "notes": remarks,
+        "description": summary or "PMS job",
+        "previous_odometer": previous_odometer,
+        "current_odometer": current,
+        "cost": job_total,
+        "lines": prepared_lines,
+    }
+
+
+def _replace_work_order_lines(
+    connection: sqlite3.Connection, work_order_id: int, lines: List[Dict[str, Any]]
+) -> None:
+    """Replace all lines on an open job."""
+    connection.execute("DELETE FROM work_order_lines WHERE work_order_id = ?", (work_order_id,))
+    for line in lines:
+        connection.execute(
+            """
+            INSERT INTO work_order_lines (
+                work_order_id, line_no, part_code, line_type, description, unit,
+                quantity, unit_price, discount, total_amount
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                work_order_id,
+                line["line_no"],
+                line["part_code"],
+                line["line_type"],
+                line["description"],
+                line["unit"],
+                line["quantity"],
+                line["unit_price"],
+                line["discount"],
+                line["total_amount"],
+            ),
+        )
+
+
+def _raise_work_order_integrity(error: sqlite3.IntegrityError) -> None:
+    """Turn unique-index failures into field messages."""
+    message = str(error).lower()
+    if "transaction" in message:
+        raise RuntimeError("Transaction ID is already used.") from error
+    raise RuntimeError("This vehicle already has an open PMS job.") from error
+
+
+def fetch_work_order(db_path: str, work_order_id: int) -> Optional[Dict[str, Any]]:
+    """Fetch one work order, or None if it does not exist."""
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                f"{_work_order_select()} WHERE w.id = ?",
+                (work_order_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            item = dict(row)
+            _attach_work_order_lines(connection, [item])
+            return item
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to fetch work order {work_order_id}: {error}") from error
+
+
+def list_pms_work_order_history(db_path: str, vehicle_id: int) -> List[Dict[str, Any]]:
+    """
+    List completed and cancelled PMS jobs for one vehicle, newest service date first.
+
+    Args:
+        db_path: SQLite database path.
+        vehicle_id: Vehicle id.
+
+    Returns:
+        Work-order rows excluding open jobs.
+    """
+    try:
+        with get_connection(db_path) as connection:
+            _require_pms_vehicle(connection, vehicle_id)
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                f"""
+                {_work_order_select()}
+                WHERE w.vehicle_id = ?
+                  AND w.job_type = ?
+                  AND w.status IN (?, ?)
+                ORDER BY COALESCE(w.service_date, substr(w.opened_at, 1, 10)) DESC, w.id DESC
+                """,
+                (
+                    vehicle_id,
+                    PMS_JOB_TYPE,
+                    PMS_STATUS_COMPLETED,
+                    PMS_STATUS_CANCELLED,
+                ),
+            )
+            orders = [dict(row) for row in cursor.fetchall()]
+            _attach_work_order_lines(connection, orders)
+            return orders
+    except RuntimeError:
+        raise
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to list PMS history for vehicle {vehicle_id}: {error}") from error
+
+
+def _write_open_pms_job(
+    connection: sqlite3.Connection,
+    work_order_id: int,
+    prepared: Dict[str, Any],
+    timestamp: str,
+) -> None:
+    """Update header fields and replace lines on an open job."""
+    connection.execute(
+        """
+        UPDATE work_orders
+        SET description = ?,
+            shop_name = ?,
+            cost = ?,
+            notes = ?,
+            remarks = ?,
+            doc_date = ?,
+            transaction_no = ?,
+            repair_type = ?,
+            service_advisor = ?,
+            technician = ?,
+            terms = ?,
+            previous_odometer = ?,
+            current_odometer = ?,
+            odometer_km = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            prepared["description"],
+            prepared["shop_name"],
+            prepared["cost"],
+            prepared["notes"],
+            prepared["remarks"],
+            prepared["doc_date"],
+            prepared["transaction_no"],
+            prepared["repair_type"],
+            prepared["service_advisor"],
+            prepared["technician"],
+            prepared["terms"],
+            prepared["previous_odometer"],
+            prepared["current_odometer"],
+            prepared["current_odometer"],
+            timestamp,
+            work_order_id,
+        ),
+    )
+    _replace_work_order_lines(connection, work_order_id, prepared["lines"])
+
+
+def open_pms_work_order(
+    db_path: str,
+    vehicle_id: int,
+    header: Dict[str, Any],
+    lines: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Open one PMS work order for a vehicle.
+
+    Header and lines may be incomplete. A second open PMS job is rejected.
+
+    Args:
+        db_path: SQLite database path.
+        vehicle_id: Company-owned vehicle id.
+        header: Repair, shop, odometer, and remarks fields.
+        lines: Parts and service lines. May be empty.
+
+    Returns:
+        The new work-order row, including lines.
+
+    Raises:
+        RuntimeError: If validation fails or an open job already exists.
+    """
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            _require_pms_vehicle(connection, vehicle_id)
+            previous = _latest_completed_odometer(connection, vehicle_id)
+            prepared = _prepare_pms_header(header, lines, previous, strict=False)
+            cursor = connection.execute(
+                """
+                INSERT INTO work_orders (
+                    vehicle_id, job_type, status, description, shop_name, cost, notes,
+                    remarks, opened_at, doc_date, transaction_no, repair_type,
+                    service_advisor, technician, terms, previous_odometer,
+                    current_odometer, odometer_km, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    vehicle_id,
+                    PMS_JOB_TYPE,
+                    PMS_STATUS_OPEN,
+                    prepared["description"],
+                    prepared["shop_name"],
+                    prepared["cost"],
+                    prepared["notes"],
+                    prepared["remarks"],
+                    timestamp,
+                    prepared["doc_date"],
+                    prepared["transaction_no"],
+                    prepared["repair_type"],
+                    prepared["service_advisor"],
+                    prepared["technician"],
+                    prepared["terms"],
+                    prepared["previous_odometer"],
+                    prepared["current_odometer"],
+                    prepared["current_odometer"],
+                    timestamp,
+                    timestamp,
+                ),
+            )
+            work_order_id = int(cursor.lastrowid)
+            _replace_work_order_lines(connection, work_order_id, prepared["lines"])
+        created = fetch_work_order(db_path, work_order_id)
+        if not created:
+            raise RuntimeError("PMS job was opened but could not be reloaded.")
+        return created
+    except RuntimeError:
+        raise
+    except sqlite3.IntegrityError as error:
+        _raise_work_order_integrity(error)
+        raise
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to open PMS job for vehicle {vehicle_id}: {error}") from error
+
+
+def update_pms_work_order(
+    db_path: str,
+    work_order_id: int,
+    header: Dict[str, Any],
+    lines: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Replace the header and lines of an open PMS job.
+
+    Completed jobs stay locked.
+
+    Args:
+        db_path: SQLite database path.
+        work_order_id: Open PMS work order id.
+        header: Repair, shop, odometer, and remarks fields.
+        lines: Replacement line list. May be empty.
+
+    Returns:
+        The updated work-order row, including lines.
+    """
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                "SELECT id, vehicle_id, job_type, status FROM work_orders WHERE id = ?",
+                (work_order_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"Work order {work_order_id} not found.")
+            if (row["job_type"] or "") != PMS_JOB_TYPE or (row["status"] or "") != PMS_STATUS_OPEN:
+                raise RuntimeError("Only an open PMS job can be edited.")
+            vehicle_id = int(row["vehicle_id"])
+            _require_pms_vehicle(connection, vehicle_id)
+            previous = _latest_completed_odometer(connection, vehicle_id)
+            prepared = _prepare_pms_header(header, lines, previous, strict=False)
+            _write_open_pms_job(connection, work_order_id, prepared, timestamp)
+        updated = fetch_work_order(db_path, work_order_id)
+        if not updated:
+            raise RuntimeError("PMS job was saved but could not be reloaded.")
+        return updated
+    except RuntimeError:
+        raise
+    except sqlite3.IntegrityError as error:
+        _raise_work_order_integrity(error)
+        raise
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to save PMS job {work_order_id}: {error}") from error
+
+
+def complete_pms_work_order(
+    db_path: str,
+    work_order_id: int,
+    header: Dict[str, Any],
+    lines: List[Dict[str, Any]],
+    completed_by_user_id: Optional[int],
+) -> Dict[str, Any]:
+    """
+    Save and complete an open PMS job.
+
+    Doc. date becomes the service date. When an interval is set, the next due
+    date is that doc. date plus the interval. The odometer on the schedule is
+    not used for due status.
+
+    Args:
+        db_path: SQLite database path.
+        work_order_id: Open PMS work order id.
+        header: Repair, shop, odometer, and remarks fields.
+        lines: At least one parts or service line.
+        completed_by_user_id: User who recorded completion.
+
+    Returns:
+        Dict with work_order, schedule_before, and schedule_after.
+    """
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                "SELECT id, vehicle_id, job_type, status FROM work_orders WHERE id = ?",
+                (work_order_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"Work order {work_order_id} not found.")
+            if (row["job_type"] or "") != PMS_JOB_TYPE or (row["status"] or "") != PMS_STATUS_OPEN:
+                raise RuntimeError("Only an open PMS job can be completed.")
+            vehicle_id = int(row["vehicle_id"])
+            _require_pms_vehicle(connection, vehicle_id)
+            previous = _latest_completed_odometer(connection, vehicle_id)
+            prepared = _prepare_pms_header(header, lines, previous, strict=True)
+            _write_open_pms_job(connection, work_order_id, prepared, timestamp)
+            done_on = prepared["doc_date"]
+            connection.execute(
+                """
+                UPDATE work_orders
+                SET status = ?,
+                    service_date = ?,
+                    doc_date = ?,
+                    completed_at = ?,
+                    completed_by_user_id = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    PMS_STATUS_COMPLETED,
+                    done_on,
+                    done_on,
+                    timestamp,
+                    completed_by_user_id,
+                    timestamp,
+                    work_order_id,
+                ),
+            )
+            schedule_before = _pms_schedule_snapshot(connection, vehicle_id)
+            months = schedule_before.get("interval_months")
+            next_due = schedule_before.get("next_due_date")
+            last_odometer = prepared["current_odometer"]
+            if months:
+                next_due = add_calendar_months(date.fromisoformat(done_on), int(months)).isoformat()
+            if schedule_before.get("vehicle_id") and (
+                months or schedule_before.get("next_due_date") is not None or last_odometer is not None
+            ):
+                connection.execute(
+                    """
+                    UPDATE pms_schedules
+                    SET next_due_date = ?,
+                        last_odometer_km = ?,
+                        updated_at = ?
+                    WHERE vehicle_id = ?
+                    """,
+                    (next_due, last_odometer, timestamp, vehicle_id),
+                )
+            schedule_after = _pms_schedule_snapshot(connection, vehicle_id)
+        completed = fetch_work_order(db_path, work_order_id)
+        if not completed:
+            raise RuntimeError("PMS job was completed but could not be reloaded.")
+        return {
+            "work_order": completed,
+            "schedule_before": schedule_before,
+            "schedule_after": schedule_after,
+        }
+    except RuntimeError:
+        raise
+    except sqlite3.IntegrityError as error:
+        _raise_work_order_integrity(error)
+        raise
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to complete PMS job {work_order_id}: {error}") from error
+
+
+def cancel_pms_work_order(db_path: str, work_order_id: int) -> Dict[str, Any]:
+    """
+    Cancel an open PMS job without changing the due date.
+
+    Args:
+        db_path: SQLite database path.
+        work_order_id: Open PMS work order id.
+
+    Returns:
+        The cancelled work-order row.
+
+    Raises:
+        RuntimeError: If the job is missing or not an open PMS job.
+    """
+    timestamp = _get_local_timestamp()
+    try:
+        with get_connection(db_path) as connection:
+            cursor = connection.execute(
+                """
+                SELECT id, job_type, status
+                FROM work_orders
+                WHERE id = ?
+                """,
+                (work_order_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError(f"Work order {work_order_id} not found.")
+            if (row[1] or "") != PMS_JOB_TYPE or (row[2] or "") != PMS_STATUS_OPEN:
+                raise RuntimeError("Only an open PMS job can be cancelled.")
+            connection.execute(
+                """
+                UPDATE work_orders
+                SET status = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (PMS_STATUS_CANCELLED, timestamp, work_order_id),
+            )
+        cancelled = fetch_work_order(db_path, work_order_id)
+        if not cancelled:
+            raise RuntimeError("PMS job was cancelled but could not be reloaded.")
+        return cancelled
+    except RuntimeError:
+        raise
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to cancel PMS job {work_order_id}: {error}") from error
 
 
 def fetch_requisition_record(db_path: str, requisition_id: int) -> Optional[Dict[str, Any]]:
@@ -4292,3 +6290,347 @@ def fetch_requisition_record(db_path: str, requisition_id: int) -> Optional[Dict
     except sqlite3.Error as error:
         message = f"Failed to fetch requisition record {requisition_id}: {error}"
         raise RuntimeError(message) from error
+
+
+DASHBOARD_USED_STATUSES = ("received", "billed")
+_HAS_PO_SQL = "r.po_reference IS NOT NULL AND TRIM(r.po_reference) != ''"
+_DASHBOARD_LITERS_SQL = """
+CASE
+    WHEN UPPER(COALESCE(r.unit, '')) = 'FULLTANK' THEN 0
+    ELSE COALESCE(r.actual_quantity, r.quantity, 0)
+END
+"""
+
+
+def _dashboard_count(connection: sqlite3.Connection, sql: str, params: tuple = ()) -> int:
+    """Return a single COUNT(*) value."""
+    cursor = connection.execute(sql, params)
+    row = cursor.fetchone()
+    return int(row[0]) if row and row[0] is not None else 0
+
+
+def get_dashboard_summary(db_path: str) -> Dict[str, int]:
+    """
+    Return the nine Dashboard card counts.
+
+    Used requests/POs are received or billed. PO cards require a PO number.
+    """
+    try:
+        with get_connection(db_path) as connection:
+            used = DASHBOARD_USED_STATUSES
+            return {
+                "vehicles": _dashboard_count(
+                    connection, "SELECT COUNT(*) FROM cars WHERE is_active = 1"
+                ),
+                "vendors": _dashboard_count(
+                    connection, "SELECT COUNT(*) FROM vendors WHERE is_active = 1"
+                ),
+                "companies": _dashboard_count(
+                    connection, "SELECT COUNT(*) FROM companies WHERE is_active = 1"
+                ),
+                "all_requests": _dashboard_count(
+                    connection,
+                    "SELECT COUNT(*) FROM requisitions WHERE is_active = 1",
+                ),
+                "used_requests": _dashboard_count(
+                    connection,
+                    """
+                    SELECT COUNT(*) FROM requisitions
+                    WHERE is_active = 1 AND status IN (?, ?)
+                    """,
+                    used,
+                ),
+                "cancelled_requests": _dashboard_count(
+                    connection,
+                    """
+                    SELECT COUNT(*) FROM requisitions
+                    WHERE is_active = 1 AND status = 'cancelled'
+                    """,
+                ),
+                "all_pos": _dashboard_count(
+                    connection,
+                    f"SELECT COUNT(*) FROM requisitions r WHERE r.is_active = 1 AND {_HAS_PO_SQL}",
+                ),
+                "used_pos": _dashboard_count(
+                    connection,
+                    f"""
+                    SELECT COUNT(*) FROM requisitions r
+                    WHERE r.is_active = 1 AND {_HAS_PO_SQL} AND r.status IN (?, ?)
+                    """,
+                    used,
+                ),
+                "cancelled_pos": _dashboard_count(
+                    connection,
+                    f"""
+                    SELECT COUNT(*) FROM requisitions r
+                    WHERE r.is_active = 1 AND {_HAS_PO_SQL} AND r.status = 'cancelled'
+                    """,
+                ),
+            }
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to load dashboard summary: {error}") from error
+
+
+def list_dashboard_filter_options(db_path: str) -> Dict[str, Any]:
+    """Companies, vendors, and fuel types for Dashboard modal filters."""
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            companies = [
+                row["company"]
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT company
+                    FROM cars
+                    WHERE is_active = 1 AND company IS NOT NULL AND TRIM(company) != ''
+                    ORDER BY company
+                    """
+                )
+            ]
+            vendors = [
+                {"id": row["id"], "name": row["name"]}
+                for row in connection.execute(
+                    """
+                    SELECT id, name FROM vendors
+                    WHERE is_active = 1
+                    ORDER BY name
+                    """
+                )
+            ]
+            fuel_types = [
+                row["fuel_type"]
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT fuel_type
+                    FROM cars
+                    WHERE is_active = 1 AND fuel_type IS NOT NULL AND TRIM(fuel_type) != ''
+                    ORDER BY fuel_type
+                    """
+                )
+            ]
+            return {
+                "companies": companies,
+                "vendors": vendors,
+                "fuel_types": fuel_types,
+            }
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to load dashboard filter options: {error}") from error
+
+
+def list_dashboard_vehicles(
+    db_path: str,
+    company: Optional[str] = None,
+    vendor_id: Optional[int] = None,
+    fuel_type: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """List active vehicles for the Dashboard modal."""
+    where = ["c.is_active = 1"]
+    params: List[Any] = []
+    if company:
+        where.append("c.company = ?")
+        params.append(company)
+    if vendor_id is not None:
+        where.append("c.vendor_id = ?")
+        params.append(vendor_id)
+    if fuel_type:
+        where.append("c.fuel_type = ?")
+        params.append(fuel_type)
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                f"""
+                SELECT
+                    c.id,
+                    c.plate_number,
+                    c.model,
+                    c.company,
+                    c.fuel_type,
+                    c.assigned_to,
+                    c.vendor_id,
+                    v.name AS vendor_name,
+                    COALESCE(agg.total_quantity, 0) AS total_quantity,
+                    COALESCE(agg.total_price, 0) AS total_price
+                FROM cars c
+                LEFT JOIN vendors v ON v.id = c.vendor_id
+                LEFT JOIN (
+                    SELECT
+                        r.vehicle_id,
+                        SUM({_DASHBOARD_LITERS_SQL}) AS total_quantity,
+                        SUM(COALESCE(r.total_price, 0)) AS total_price
+                    FROM requisitions r
+                    WHERE r.is_active = 1
+                    GROUP BY r.vehicle_id
+                ) agg ON agg.vehicle_id = c.id
+                WHERE {" AND ".join(where)}
+                ORDER BY c.plate_number
+                """,
+                tuple(params),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to list dashboard vehicles: {error}") from error
+
+
+def list_dashboard_vendors(db_path: str) -> List[Dict[str, Any]]:
+    """List active vendors with request quantity and amount totals."""
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                f"""
+                SELECT
+                    v.id,
+                    v.name,
+                    v.address,
+                    COALESCE(agg.total_quantity, 0) AS total_quantity,
+                    COALESCE(agg.total_price, 0) AS total_price
+                FROM vendors v
+                LEFT JOIN (
+                    SELECT
+                        r.vendor_id,
+                        SUM({_DASHBOARD_LITERS_SQL}) AS total_quantity,
+                        SUM(COALESCE(r.total_price, 0)) AS total_price
+                    FROM requisitions r
+                    WHERE r.is_active = 1
+                    GROUP BY r.vendor_id
+                ) agg ON agg.vendor_id = v.id
+                WHERE v.is_active = 1
+                ORDER BY v.name
+                """
+            )
+            return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to list dashboard vendors: {error}") from error
+
+
+def list_dashboard_companies(db_path: str) -> List[Dict[str, Any]]:
+    """List active companies with request quantity and amount totals."""
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                f"""
+                SELECT
+                    co.id,
+                    co.code,
+                    co.name,
+                    COALESCE(agg.total_quantity, 0) AS total_quantity,
+                    COALESCE(agg.total_price, 0) AS total_price
+                FROM companies co
+                LEFT JOIN (
+                    SELECT
+                        c.company AS company_code,
+                        SUM({_DASHBOARD_LITERS_SQL}) AS total_quantity,
+                        SUM(COALESCE(r.total_price, 0)) AS total_price
+                    FROM requisitions r
+                    INNER JOIN cars c ON c.id = r.vehicle_id
+                    WHERE r.is_active = 1
+                    GROUP BY c.company
+                ) agg ON agg.company_code = co.code
+                WHERE co.is_active = 1
+                ORDER BY co.name
+                """
+            )
+            return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to list dashboard companies: {error}") from error
+
+
+def list_dashboard_requisitions(
+    db_path: str,
+    *,
+    scope: str,
+    po_only: bool = False,
+    plate: Optional[str] = None,
+    vendor_id: Optional[int] = None,
+    company: Optional[str] = None,
+    fuel_type: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    cancelled_from: Optional[str] = None,
+    cancelled_to: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    List requisitions or POs for a Dashboard modal.
+
+    scope: all | used | cancelled
+    Date filters apply to created_at (requests) or po_created_at (POs).
+    Cancelled date uses updated_at on cancelled rows.
+    """
+    normalized = (scope or "all").strip().lower()
+    if normalized not in {"all", "used", "cancelled"}:
+        raise RuntimeError("Invalid dashboard scope.")
+
+    where = ["r.is_active = 1"]
+    params: List[Any] = []
+    if po_only:
+        where.append(_HAS_PO_SQL)
+    if normalized == "used":
+        where.append("r.status IN (?, ?)")
+        params.extend(DASHBOARD_USED_STATUSES)
+    elif normalized == "cancelled":
+        where.append("r.status = 'cancelled'")
+
+    if plate:
+        where.append("UPPER(c.plate_number) LIKE ?")
+        params.append(f"%{plate.strip().upper()}%")
+    if vendor_id is not None:
+        where.append("r.vendor_id = ?")
+        params.append(vendor_id)
+    if company:
+        where.append("c.company = ?")
+        params.append(company)
+    if fuel_type:
+        where.append("r.fuel_type = ?")
+        params.append(fuel_type)
+
+    date_column = "r.po_created_at" if po_only else "r.created_at"
+    if date_from:
+        where.append(f"date({date_column}) >= date(?)")
+        params.append(date_from)
+    if date_to:
+        where.append(f"date({date_column}) <= date(?)")
+        params.append(date_to)
+    if normalized == "cancelled" and cancelled_from:
+        where.append("date(r.updated_at) >= date(?)")
+        params.append(cancelled_from)
+    if normalized == "cancelled" and cancelled_to:
+        where.append("date(r.updated_at) <= date(?)")
+        params.append(cancelled_to)
+
+    order = "r.po_created_at DESC, r.id DESC" if po_only else "r.created_at DESC, r.id DESC"
+    try:
+        with get_connection(db_path) as connection:
+            connection.row_factory = sqlite3.Row
+            cursor = connection.execute(
+                f"""
+                SELECT
+                    r.id,
+                    r.serial_number,
+                    r.po_reference,
+                    r.quantity,
+                    r.unit,
+                    r.total_price,
+                    r.status,
+                    r.fuel_type,
+                    r.created_at,
+                    r.po_created_at,
+                    r.updated_at,
+                    r.cancel_reason,
+                    r.cancelled_by,
+                    c.plate_number,
+                    c.model,
+                    c.company,
+                    v.name AS vendor_name
+                FROM requisitions r
+                INNER JOIN cars c ON c.id = r.vehicle_id
+                LEFT JOIN vendors v ON v.id = r.vendor_id
+                WHERE {" AND ".join(where)}
+                ORDER BY {order}
+                """,
+                tuple(params),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error as error:
+        raise RuntimeError(f"Failed to list dashboard requisitions: {error}") from error

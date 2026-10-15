@@ -8,6 +8,7 @@ import { AdminEditDialog } from "../../features/purchasing/AdminEditDialog";
 import { EditBillingReferenceDialog } from "../../features/reports/EditBillingReferenceDialog";
 import { useAuth } from "../../context/AuthContext";
 import { formatPeso } from "../../utils/format";
+import { formatPoDate } from "../../utils/requisitionDates";
 import { canManageUsers } from "../../utils/roles";
 import { notifyBillingQueuesChanged } from "../../utils/billingEvents";
 import { notifyPurchasingQueuesChanged } from "../../utils/purchasingEvents";
@@ -195,6 +196,7 @@ export function BillingBilledPage() {
               <tr>
                 <th></th>
                 <th>PO No.</th>
+                <th>PO date</th>
                 <th>Details</th>
                 <th>Fuel Type</th>
                 <th>Receipt #</th>
@@ -209,7 +211,7 @@ export function BillingBilledPage() {
                 return (
                   <Fragment key={group.label}>
                     <tr className="billing-vendor-group-header">
-                      <td colSpan={7}>
+                      <td colSpan={8}>
                         <div className="billing-billed-header-row">
                           <button
                             type="button"
@@ -249,6 +251,7 @@ export function BillingBilledPage() {
                         <tr key={req.id}>
                           <td></td>
                           <td>{req.po_reference ?? "—"}</td>
+                          <td>{formatPoDate(req.po_created_at)}</td>
                           <td>
                             {req.plate_number ?? "—"} — {req.vendor_name ?? "—"} | PO:{" "}
                             {req.po_reference ?? "—"}

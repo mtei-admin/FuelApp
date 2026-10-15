@@ -25,7 +25,7 @@ from src.database import (
 
 
 def list_signatories(db_path: str) -> List[Dict[str, Any]]:
-    """Return active users who may sign POs (approver, accounting, superuser)."""
+    """Return active users who may sign POs (purchasing.sign_po permission)."""
     rows = list_po_signatories(db_path)
     result: List[Dict[str, Any]] = []
     for row in rows:
@@ -150,8 +150,9 @@ def save_receiving(
     actor: Optional[Dict[str, Any]] = None,
     is_update: bool = False,
     receiving_remarks: Optional[str] = None,
+    user: Optional[Dict[str, Any]] = None,
 ) -> None:
-    """Record or update delivery details (released or received; superuser may skip release)."""
+    """Record or update delivery details (released or received; admin may skip release)."""
     before = fetch_requisition_record(db_path, requisition_id)
     save_requisition_receiving(
         db_path,
@@ -162,6 +163,7 @@ def save_receiving(
         receipt_number,
         user_role=user_role,
         receiving_remarks=receiving_remarks,
+        user=user,
     )
     after = fetch_requisition_record(db_path, requisition_id)
     action = "receiving_updated" if is_update else "received"

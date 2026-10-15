@@ -10,6 +10,7 @@ from src.database import (
     get_user_id_from_session,
     touch_user_session,
 )
+from src.permissions import build_public_user, effective_permissions
 
 
 def get_db_path() -> str:
@@ -46,7 +47,7 @@ def get_current_user_optional(
     if not user or not user.get("is_active"):
         return None
 
-    return _public_user(user)
+    return build_public_user(user)
 
 
 def get_current_user(
@@ -70,6 +71,8 @@ def require_roles(*allowed_roles: str):
     """
     Build a dependency that restricts access to specific roles.
 
+    Legacy helper — prefer require_permission for new routes.
+
     Args:
         allowed_roles: Role names allowed to access the route.
 
@@ -91,14 +94,47 @@ def require_roles(*allowed_roles: str):
     return _checker
 
 
-def _public_user(user: Dict[str, Any]) -> Dict[str, Any]:
-    """Strip sensitive fields from a user record."""
-    return {
-        "id": user["id"],
-        "username": user["username"],
-        "role": user["role"],
-        "full_name": user.get("full_name"),
-        "email": user.get("email"),
-        "company": user.get("company"),
-        "is_active": bool(user.get("is_active")),
-    }
+def require_permission(*required_codes: str):
+    """
+    Build a dependency that restricts access to users with any listed permission.
+
+    Args:
+        required_codes: Permission codes; user needs at least one.
+
+    Returns:
+        FastAPI dependency function.
+    """
+
+    def _checker(
+        user: Annotated[Dict[str, Any], Depends(get_current_user)],
+    ) -> Dict[str, Any]:
+        granted = set(user.get("permissions") or [])
+        if not any(code in granted for code in required_codes):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions",
+            )
+        return user
+
+    return _checker
+
+
+def user_effective_permissions(user: Dict[str, Any], db_path: str) -> set[str]:
+    """
+    Resolve permissions for a public user or raw DB row.
+
+    Args:
+        user: Public user dict or database row.
+        db_path: SQLite path when a fresh DB row lookup is required.
+
+    Returns:
+        Effective permission code set.
+    """
+    if user.get("permissions") and "hashed_password" not in user:
+        return set(user.get("permissions") or [])
+    if "permissions" in user and user.get("permissions") is not None:
+        return effective_permissions(user)
+    refreshed = fetch_user_by_id(db_path, user["id"])
+    if not refreshed:
+        return set()
+    return effective_permissions(refreshed)

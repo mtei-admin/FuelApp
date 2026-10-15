@@ -6,7 +6,8 @@ import type { BillingItem, CcReconcileSummary } from "../../api/billing";
 import type { PurchasingRequisition } from "../../api/purchasing";
 import { AdminEditDialog } from "../../features/purchasing/AdminEditDialog";
 import { useAuth } from "../../context/AuthContext";
-import { formatPeso } from "../../utils/format";
+import { formatAppDate, formatPeso } from "../../utils/format";
+import { formatRequestDate } from "../../utils/requisitionDates";
 import { canManageUsers } from "../../utils/roles";
 import { downloadBlobPost, downloadPdfPost, safeDownloadStem } from "../../utils/download";
 import { notifyBillingQueuesChanged } from "../../utils/billingEvents";
@@ -68,7 +69,7 @@ export function BillingCcReconciliationPage() {
   const seenVendorKeysRef = useRef<Set<string>>(new Set());
 
   const vendorGroups = useMemo(() => groupByVendor(items), [items]);
-  const columnCount = isSuperuser ? 9 : 8;
+  const columnCount = isSuperuser ? 10 : 9;
   const allCollapsed =
     vendorGroups.length > 0 && vendorGroups.every((g) => collapsedVendors.has(g.vendorKey));
   const allExpanded =
@@ -285,6 +286,7 @@ export function BillingCcReconciliationPage() {
               <tr>
                 <th></th>
                 <th>Request #</th>
+                <th>Requested</th>
                 <th>Vehicle / Vendor</th>
                 <th>Fuel Type</th>
                 <th>Fill Date</th>
@@ -343,11 +345,12 @@ export function BillingCcReconciliationPage() {
                             />
                           </td>
                           <td>{req.serial_number ?? "—"}</td>
+                          <td>{formatRequestDate(req.created_at)}</td>
                           <td>
                             {req.plate_number} — {req.vendor_name}
                           </td>
                           <td>{req.fuel_type ?? "—"}</td>
-                          <td>{req.received_date?.slice(0, 10) ?? "—"}</td>
+                          <td>{formatAppDate(req.received_date)}</td>
                           <td>{req.receipt_number ?? "—"}</td>
                           <td>{req.cc_card_reference ?? "—"}</td>
                           <td>{formatPeso(req.total_price)}</td>

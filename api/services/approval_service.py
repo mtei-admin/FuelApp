@@ -13,6 +13,7 @@ from src.database import (
     update_requisition,
     update_requisition_status,
 )
+from src.permissions import APPROVALS_ACT, user_has_permission
 
 
 def _compute_display_total(db_path: str, req: Dict[str, Any]) -> Optional[float]:
@@ -35,10 +36,10 @@ def _compute_display_total(db_path: str, req: Dict[str, Any]) -> Optional[float]
 
 def list_pending(
     db_path: str,
-    user_role: str,
+    user: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     """List pending requisitions with display totals and permission flags."""
-    can_approve = user_role.lower() in {"approver", "accounting", "superuser"}
+    can_approve = user_has_permission(user, APPROVALS_ACT)
     rows = list_pending_requisitions(db_path)
     result: List[Dict[str, Any]] = []
     for row in rows:
@@ -150,7 +151,7 @@ def update_pending_quantity(
     db_path: str,
     requisition_id: int,
     user_id: int,
-    user_role: str,
+    user: Dict[str, Any],
     quantity_mode: str,
     quantity: float,
     notes: str,
@@ -172,7 +173,7 @@ def update_pending_quantity(
         db_path=db_path,
         requisition_id=requisition_id,
         user_id=user_id,
-        user_role=user_role,
+        user_role=user.get("role", ""),
         vehicle_id=full_req["vehicle_id"],
         vendor_id=full_req.get("vendor_id"),
         quantity=quantity,
@@ -180,6 +181,7 @@ def update_pending_quantity(
         unit_price=full_req.get("unit_price"),
         notes=notes.strip(),
         fuel_type=full_req.get("fuel_type"),
+        user=user,
     )
     after = fetch_requisition_record(db_path, requisition_id)
     log_field_update(

@@ -36,6 +36,7 @@ export interface PurchasingRequisition {
   release_remarks?: string | null;
   receiving_remarks?: string | null;
   created_at?: string | null;
+  po_created_at?: string | null;
   status?: string;
   settlement_type?: string;
   approved_by?: string | null;

@@ -21,6 +21,9 @@ class VehicleResponse(BaseModel):
     fuel_type: Optional[str] = None
     company: Optional[str] = None
     assigned_to: Optional[str] = None
+    registration_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    is_company_owned: bool = False
     is_active: bool = True
     created_at: Optional[str] = None
 
@@ -34,6 +37,9 @@ class VehicleCreateRequest(BaseModel):
     company: str = Field(..., min_length=1)
     vendor_id: Optional[int] = None
     assigned_to: str = Field(..., min_length=1)
+    registration_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    is_company_owned: bool = False
 
     @field_validator("plate_number")
     @classmethod
@@ -51,6 +57,9 @@ class VehicleUpdateRequest(BaseModel):
     company: str = Field(..., min_length=1)
     vendor_id: Optional[int] = None
     assigned_to: str = Field(..., min_length=1)
+    registration_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    is_company_owned: bool = False
 
     @field_validator("plate_number")
     @classmethod

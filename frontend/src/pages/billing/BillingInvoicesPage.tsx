@@ -7,6 +7,7 @@ import type { PurchasingRequisition } from "../../api/purchasing";
 import { AdminEditDialog } from "../../features/purchasing/AdminEditDialog";
 import { useAuth } from "../../context/AuthContext";
 import { formatPeso } from "../../utils/format";
+import { formatPoDate } from "../../utils/requisitionDates";
 import { canManageUsers } from "../../utils/roles";
 import { downloadBlobPost, downloadPdfPost, safeDownloadStem } from "../../utils/download";
 import { notifyBillingQueuesChanged } from "../../utils/billingEvents";
@@ -67,7 +68,7 @@ export function BillingInvoicesPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const vendorGroups = useMemo(() => groupByVendor(items), [items]);
-  const columnCount = isSuperuser ? 9 : 8;
+  const columnCount = isSuperuser ? 10 : 9;
   const allCollapsed =
     vendorGroups.length > 0 && vendorGroups.every((g) => collapsedVendors.has(g.vendorKey));
   const allExpanded =
@@ -277,6 +278,7 @@ export function BillingInvoicesPage() {
               <tr>
                 <th></th>
                 <th>PO No.</th>
+                <th>PO date</th>
                 <th>Details</th>
                 <th>Fuel Type</th>
                 <th>Receipt #</th>
@@ -335,6 +337,7 @@ export function BillingInvoicesPage() {
                             />
                           </td>
                           <td>{req.po_reference ?? "—"}</td>
+                          <td>{formatPoDate(req.po_created_at)}</td>
                           <td>
                             {req.plate_number ?? "—"} | PO: {req.po_reference ?? "—"}
                           </td>

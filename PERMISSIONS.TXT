@@ -1,0 +1,128 @@
+PERMISSIONS.TXT
+============
+FuelApp user permissions (checkbox model)
+Last updated: 2026-08-26
+
+Overview
+--------
+Each user stores an explicit permission list in users.permissions (JSON array).
+Baseline permissions apply to every active logged-in user at runtime (not stored).
+Legacy users.role is kept for backward compatibility and auto-synced when a
+selection exactly matches a role template.
+
+Source of truth (code):
+- src/permissions.py          — catalog, templates, validation, effective access
+- frontend/src/types/permissions.ts — UI groups and template presets (mirror)
+
+Baseline (all authenticated users)
+----------------------------------
+fuel.prices.view              View current fuel prices board
+fleet.registrations.view        Open Registrations module
+fleet.registrations.update      Update LTO / OR-CR fields
+
+Fleet portal
+------------
+fleet.insurance               Insurance portal module
+fleet.pms                       PMS due dates and work orders
+fleet.repairs                   Repairs (future placeholder)
+fleet.master_data               Admin / Master Data (vendors, companies, service centers, vehicles)
+
+Fuel requests
+-------------
+fuel.requests.create            Submit new fuel requests
+fuel.requests.edit_own          Edit own pending requests (once)
+fuel.requests.edit_any          Override edit rules (legacy superuser on requests)
+fuel.encode.receipt             Encode menu — record released PO receipt
+fuel.encode.cc_fill             Encode menu — record credit card fill
+fuel.prices.edit                Edit vendor fuel prices (Purchasing board)
+
+Workflow
+--------
+approvals.view                  See approvals queues (may be view-only)
+approvals.act                   Approve, reject, cancel approved POs
+purchasing.access               Purchasing menus and API
+purchasing.sign_po              Appear in PO signatory dropdown
+purchasing.undo_release         Undo a released PO (not yet received)
+purchasing.admin_edit           Full purchasing record override
+billing.access                  Billing menus and API
+billing.correct                 Billing corrections / unbill
+reports.view                    Reports module
+dashboard.view                  Dashboard module
+
+Audit & admin
+-------------
+audit.view                      Transaction logs
+audit.active_users              Active sessions page
+admin.manage_users              Enroll/edit/deactivate users; Superuser admin-cancel (pending through received)
+
+Implied permissions (auto-enabled when parent is ticked)
+--------------------------------------------------------
+approvals.act                   -> approvals.view
+purchasing.sign_po              -> purchasing.access, approvals.view
+purchasing.undo_release         -> purchasing.access
+purchasing.admin_edit           -> purchasing.access
+billing.correct                 -> billing.access
+fuel.prices.edit                -> fuel.prices.view
+fuel.requests.edit_own          -> fuel.requests.create
+fuel.requests.edit_any          -> fuel.requests.create
+fuel.encode.cc_fill             -> fuel.encode.receipt
+audit.active_users              -> audit.view
+admin.manage_users              -> fleet.master_data
+
+Company scope
+-------------
+Required on the user account when either encode permission is granted:
+- fuel.encode.receipt
+- fuel.encode.cc_fill
+
+Role template → permission migration (initial backfill)
+-------------------------------------------------------
+encoder:
+  fuel.requests.create, fuel.requests.edit_own,
+  fuel.encode.receipt, fuel.encode.cc_fill
+
+approver:
+  approvals.view, approvals.act,
+  fleet.master_data, fleet.insurance
+
+purchaser:
+  fuel.requests.create, fuel.requests.edit_own,
+  approvals.view, purchasing.access, purchasing.admin_edit,
+  fuel.prices.edit, billing.access, reports.view,
+  fleet.master_data, fleet.insurance
+
+accounting:
+  approvals.view, approvals.act,
+  purchasing.access, purchasing.sign_po,
+  fuel.prices.edit, billing.access, billing.correct,
+  reports.view, dashboard.view, audit.view,
+  fleet.master_data, fleet.insurance
+
+superuser:
+  All non-baseline permissions (full access)
+
+Special cases
+-------------
+- joseph (encoder): backfill adds fleet.insurance on top of encoder template
+- Last admin.manage_users holder cannot remove that permission from themselves
+- Permission changes take effect on next API request (session reloads user row)
+
+Phase 2 (complete — API enforcement)
+------------------------------------
+All FastAPI routers use require_permission() via api/core/access.py typed dependencies.
+Business rules updated:
+- can_user_edit_requisition: fuel.requests.edit_any / edit_own
+- save_requisition_receiving: encode-only vs purchasing.admin_edit override
+- list_po_signatories: purchasing.sign_po permission (not role IN (...))
+
+Legacy require_roles() remains in dependencies.py for reference only (unused by routers).
+
+Phase 3 (optional / remaining)
+------------------------------
+- Streamlit app.py role checks if :8501 still used
+- Role hierarchy edit for non-owner pending edits (still uses role rank as fallback)
+
+Admin UI
+--------
+Master Data → Users tab: checkbox groups + "Apply template" preset dropdown.
+Stored permissions are explicit only (baseline shown disabled as "All users").

@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useRef, useState } from "react";
 import * as vendorApi from "../../api/vendors";
 import * as vehicleApi from "../../api/vehicles";
 import { ApiError } from "../../api/client";
@@ -14,7 +14,7 @@ interface VehicleFormProps {
   initial?: Vehicle;
   vendors: Vendor[];
   options: VehicleOptions;
-  onSaved: () => void;
+  onSaved: (vehicleId: number) => void;
   onCancel: () => void;
 }
 
@@ -41,6 +41,15 @@ function VehicleForm({
     initial?.vendor_id ? String(initial.vendor_id) : "",
   );
   const [assignedTo, setAssignedTo] = useState(initial?.assigned_to ?? "");
+  const [isCompanyOwned, setIsCompanyOwned] = useState(
+    initial ? Boolean(initial.is_company_owned) : true,
+  );
+  const [registrationDate, setRegistrationDate] = useState(
+    initial?.registration_date ?? "",
+  );
+  const [expirationDate, setExpirationDate] = useState(
+    initial?.expiration_date ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -62,14 +71,18 @@ function VehicleForm({
       company,
       vendor_id: vendorId ? Number(vendorId) : null,
       assigned_to: assignedTo.trim(),
+      is_company_owned: isCompanyOwned,
+      registration_date: isCompanyOwned ? registrationDate.trim() || null : null,
+      expiration_date: isCompanyOwned ? expirationDate.trim() || null : null,
     };
     try {
       if (initial) {
-        await vehicleApi.updateVehicle(initial.id, payload);
+        const updated = await vehicleApi.updateVehicle(initial.id, payload);
+        onSaved(updated.id);
       } else {
-        await vehicleApi.createVehicle(payload);
+        const created = await vehicleApi.createVehicle(payload);
+        onSaved(created.id);
       }
-      onSaved();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Save failed");
     } finally {
@@ -92,7 +105,8 @@ function VehicleForm({
       />
       <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
         Letters, numbers, hyphen, spaces, and "&" only. Saved in uppercase.
-      </p>      <label htmlFor="vehicle-model">Make / Model</label>
+      </p>
+      <label htmlFor="vehicle-model">Make / Model</label>
       <input
         id="vehicle-model"
         value={model}
@@ -145,6 +159,34 @@ function VehicleForm({
         onChange={(e) => setAssignedTo(e.target.value)}
         required
       />
+      <label className="checkbox-row" htmlFor="vehicle-company-owned">
+        <input
+          id="vehicle-company-owned"
+          type="checkbox"
+          checked={isCompanyOwned}
+          onChange={(e) => setIsCompanyOwned(e.target.checked)}
+        />
+        Company owned vehicle
+      </label>
+      <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+        Only company-owned vehicles appear in Registrations / Renewal.
+      </p>
+      <label htmlFor="vehicle-reg-date">Registration date</label>
+      <input
+        id="vehicle-reg-date"
+        type="date"
+        value={registrationDate}
+        onChange={(e) => setRegistrationDate(e.target.value)}
+        disabled={!isCompanyOwned}
+      />
+      <label htmlFor="vehicle-exp-date">Expiration date</label>
+      <input
+        id="vehicle-exp-date"
+        type="date"
+        value={expirationDate}
+        onChange={(e) => setExpirationDate(e.target.value)}
+        disabled={!isCompanyOwned}
+      />
       {error && <p className="error">{error}</p>}
       <div className="form-actions">
         <button type="submit" disabled={submitting}>
@@ -158,6 +200,8 @@ function VehicleForm({
   );
 }
 
+const VEHICLE_TABLE_COLUMNS = 10;
+
 export function VehiclesTab() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -166,6 +210,46 @@ export function VehiclesTab() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Vehicle | null>(null);
+  const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+  const pendingFocusId = useRef<number | null>(null);
+
+  function scrollToVehicleRow(vehicleId: number) {
+    requestAnimationFrame(() => {
+      rowRefs.current.get(vehicleId)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function setRowRef(vehicleId: number, element: HTMLTableRowElement | null) {
+    if (element) {
+      rowRefs.current.set(vehicleId, element);
+    } else {
+      rowRefs.current.delete(vehicleId);
+    }
+  }
+
+  useEffect(() => {
+    if (editing != null || showForm || pendingFocusId.current == null) {
+      return;
+    }
+    const vehicleId = pendingFocusId.current;
+    pendingFocusId.current = null;
+    scrollToVehicleRow(vehicleId);
+  }, [editing, showForm, vehicles]);
+
+  function openAddForm() {
+    setEditing(null);
+    setShowForm(true);
+  }
+
+  function openEditForm(vehicle: Vehicle) {
+    setShowForm(false);
+    setEditing(vehicle);
+  }
+
+  function handleCancelEdit(vehicleId: number) {
+    pendingFocusId.current = vehicleId;
+    setEditing(null);
+  }
 
   const loadData = useCallback(async () => {
     setError(null);
@@ -201,11 +285,11 @@ export function VehiclesTab() {
     }
   }
 
-  function handleSaved() {
+  async function handleSaved(focusVehicleId: number) {
+    pendingFocusId.current = focusVehicleId;
     setShowForm(false);
     setEditing(null);
-    setLoading(true);
-    loadData();
+    await loadData();
   }
 
   if (loading || !options) {
@@ -216,31 +300,14 @@ export function VehiclesTab() {
     <section>
       <div className="section-header">
         <h2>Vehicles</h2>
-        {!showForm && !editing && (
-          <button type="button" onClick={() => setShowForm(true)}>
+        {!showForm && (
+          <button type="button" onClick={openAddForm}>
             + Add Entry
           </button>
         )}
       </div>
       {error && <p className="error">{error}</p>}
-      {showForm && (
-        <VehicleForm
-          vendors={vendors}
-          options={options}
-          onSaved={handleSaved}
-          onCancel={() => setShowForm(false)}
-        />
-      )}
-      {editing && (
-        <VehicleForm
-          initial={editing}
-          vendors={vendors}
-          options={options}
-          onSaved={handleSaved}
-          onCancel={() => setEditing(null)}
-        />
-      )}
-      {vehicles.length === 0 ? (
+      {vehicles.length === 0 && !showForm ? (
         <p className="empty">No active vehicles yet.</p>
       ) : (
         <table className="data-table">
@@ -249,6 +316,9 @@ export function VehiclesTab() {
               <th>Plate</th>
               <th>Make / Model</th>
               <th>Company</th>
+              <th>Owned</th>
+              <th>Reg. date</th>
+              <th>Expiration</th>
               <th>Fuel</th>
               <th>Assigned To</th>
               <th>Default Vendor</th>
@@ -256,27 +326,58 @@ export function VehiclesTab() {
             </tr>
           </thead>
           <tbody>
-            {vehicles.map((vehicle) => (
-              <tr key={vehicle.id}>
-                <td>{vehicle.plate_number}</td>
-                <td>{vehicle.model}</td>
-                <td>{vehicle.company || "—"}</td>
-                <td>{vehicle.fuel_type || "—"}</td>
-                <td>{vehicle.assigned_to || "—"}</td>
-                <td>{vehicle.vendor_name || "—"}</td>
-                <td className="actions">
-                  <button type="button" onClick={() => setEditing(vehicle)}>
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={() => handleDeactivate(vehicle)}
-                  >
-                    Deactivate
-                  </button>
+            {showForm && (
+              <tr>
+                <td colSpan={VEHICLE_TABLE_COLUMNS} className="inline-edit-cell">
+                  <VehicleForm
+                    vendors={vendors}
+                    options={options}
+                    onSaved={handleSaved}
+                    onCancel={() => setShowForm(false)}
+                  />
                 </td>
               </tr>
+            )}
+            {vehicles.map((vehicle) => (
+              <Fragment key={vehicle.id}>
+                {editing?.id === vehicle.id ? (
+                  <tr>
+                    <td colSpan={VEHICLE_TABLE_COLUMNS} className="inline-edit-cell">
+                      <VehicleForm
+                        initial={editing}
+                        vendors={vendors}
+                        options={options}
+                        onSaved={handleSaved}
+                        onCancel={() => handleCancelEdit(vehicle.id)}
+                      />
+                    </td>
+                  </tr>
+                ) : (
+                  <tr ref={(element) => setRowRef(vehicle.id, element)}>
+                    <td>{vehicle.plate_number}</td>
+                    <td>{vehicle.model}</td>
+                    <td>{vehicle.company || "—"}</td>
+                    <td>{vehicle.is_company_owned ? "Yes" : "No"}</td>
+                    <td>{vehicle.registration_date || "—"}</td>
+                    <td>{vehicle.expiration_date || "—"}</td>
+                    <td>{vehicle.fuel_type || "—"}</td>
+                    <td>{vehicle.assigned_to || "—"}</td>
+                    <td>{vehicle.vendor_name || "—"}</td>
+                    <td className="actions">
+                      <button type="button" onClick={() => openEditForm(vehicle)}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="danger"
+                        onClick={() => handleDeactivate(vehicle)}
+                      >
+                        Deactivate
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

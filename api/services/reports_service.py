@@ -191,7 +191,7 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
     writer.writerow([
         "PO No.", "Plate", "Quantity", "Unit", "Total Price", "Vendor",
         "Status", "Status Group", "Payment", "Invoice #", "CC Stmt #",
-        "Requested By", "Created",
+        "Requested By", "Requested", "PO Date",
     ])
     for row in rows:
         qty = row.get("quantity") or ""
@@ -214,5 +214,6 @@ def build_report_csv(rows: List[Dict[str, Any]]) -> bytes:
             row.get("cc_statement_reference") or "",
             row.get("requester_name") or "",
             row.get("created_at") or "",
+            row.get("po_created_at") or "",
         ])
     return buffer.getvalue().encode("utf-8-sig")

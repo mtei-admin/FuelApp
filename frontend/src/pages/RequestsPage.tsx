@@ -1,9 +1,10 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as requisitionsApi from "../api/requisitions";
 import * as purchasingApi from "../api/purchasing";
-import type { PurchasingRequisition } from "../api/purchasing";
+import type { FuelPriceRow, PurchasingRequisition } from "../api/purchasing";
 import { ApiError } from "../api/client";
 import { AdminEditDialog } from "../features/purchasing/AdminEditDialog";
+import { CancelApprovedDialog } from "../features/approvals/CancelApprovedDialog";
 import { useAuth } from "../context/AuthContext";
 import type {
   FormVehicle,
@@ -18,8 +19,11 @@ import {
   parsePositiveInteger,
   unitToQuantityMode,
 } from "../utils/format";
+import { lookupVendorFuelPrice } from "../utils/fuelPrices";
+import { formatRequestDate } from "../utils/requisitionDates";
+import { canAdminCancelStatus } from "../utils/requisitionStatuses";
 import type { SettlementType } from "../utils/settlement";
-import { canManageUsers } from "../utils/roles";
+import { canManageUsers, canPurchasingAdminEdit } from "../utils/roles";
 
 function QuantityLitersInput({
   value,
@@ -54,11 +58,13 @@ function validateNumericQuantity(quantity: number): string | null {
 function EditRequestForm({
   req,
   context,
+  fuelPrices,
   onSaved,
   onCancel,
 }: {
   req: Requisition;
   context: RequestFormContext;
+  fuelPrices: FuelPriceRow[];
   onSaved: () => void;
   onCancel: () => void;
 }) {
@@ -84,6 +90,8 @@ function EditRequestForm({
   const [fuelType, setFuelType] = useState(
     req.fuel_type ?? fuelMeta.defaultValue ?? fuelMeta.options[0],
   );
+  const [unitPrice, setUnitPrice] = useState(req.unit_price ?? 0);
+  const skipPriceLookup = useRef(true);
 
   useEffect(() => {
     if (selectedVehicle?.vendor_id) {
@@ -92,6 +100,15 @@ function EditRequestForm({
     const meta = getFuelTypeOptions(selectedVehicle?.fuel_type);
     setFuelType(meta.defaultValue ?? meta.options[0] ?? "Diesel");
   }, [vehicleId, selectedVehicle]);
+
+  useEffect(() => {
+    if (skipPriceLookup.current) {
+      skipPriceLookup.current = false;
+      return;
+    }
+    const price = lookupVendorFuelPrice(fuelPrices, vendorId, fuelType);
+    setUnitPrice(price ?? 0);
+  }, [vendorId, fuelType, fuelPrices]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -112,6 +129,7 @@ function EditRequestForm({
       quantity: quantityMode === "numeric" ? quantity : 0,
       notes,
       settlement_type: settlementType,
+      unit_price: unitPrice > 0 ? unitPrice : null,
     };
     try {
       await requisitionsApi.updateRequisition(req.id, payload);
@@ -180,6 +198,15 @@ function EditRequestForm({
           <QuantityLitersInput value={quantity} onChange={setQuantity} />
         </>
       )}
+      <label>Unit price (₱/liter)</label>
+      <input
+        type="number"
+        min={0}
+        step={0.01}
+        value={unitPrice > 0 ? unitPrice : ""}
+        onChange={(e) => setUnitPrice(Number(e.target.value))}
+        placeholder="Optional — from current vendor price"
+      />
       <fieldset className="radio-row">
         <legend>Payment method</legend>
         <label>
@@ -216,7 +243,8 @@ function EditRequestForm({
 
 export function RequestsPage() {
   const { user } = useAuth();
-  const isSuperuser = canManageUsers(user?.role);
+  const canAdminEdit = canPurchasingAdminEdit(user);
+  const isSuperuser = canManageUsers(user);
   const [context, setContext] = useState<RequestFormContext | null>(null);
   const [history, setHistory] = useState<Requisition[]>([]);
   const [showHistory, setShowHistory] = useState(false);
@@ -225,6 +253,7 @@ export function RequestsPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [editing, setEditing] = useState<Requisition | null>(null);
   const [adminEditing, setAdminEditing] = useState<Requisition | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Requisition | null>(null);
   const [priorWarning, setPriorWarning] = useState<string | null>(null);
 
   const [vehicleId, setVehicleId] = useState<number | "">("");
@@ -235,6 +264,8 @@ export function RequestsPage() {
   const [notes, setNotes] = useState("");
   const [requestorName, setRequestorName] = useState("");
   const [settlementType, setSettlementType] = useState<SettlementType>("vendor_invoice");
+  const [unitPrice, setUnitPrice] = useState(0);
+  const [fuelPrices, setFuelPrices] = useState<FuelPriceRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const selectedVehicle: FormVehicle | undefined = context?.vehicles.find(
@@ -248,12 +279,14 @@ export function RequestsPage() {
   const loadData = useCallback(async () => {
     setError(null);
     try {
-      const [ctx, rows] = await Promise.all([
+      const [ctx, rows, prices] = await Promise.all([
         requisitionsApi.getRequestFormContext(),
         requisitionsApi.listMyRequisitions(),
+        purchasingApi.listFuelPrices(),
       ]);
       setContext(ctx);
       setHistory(rows);
+      setFuelPrices(prices);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to load");
     } finally {
@@ -294,6 +327,15 @@ export function RequestsPage() {
       .catch(() => setPriorWarning(null));
   }, [selectedVehicle]);
 
+  useEffect(() => {
+    if (!vendorId || !fuelType) {
+      setUnitPrice(0);
+      return;
+    }
+    const price = lookupVendorFuelPrice(fuelPrices, vendorId, fuelType);
+    setUnitPrice(price ?? 0);
+  }, [vendorId, fuelType, fuelPrices]);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!vehicleId || !vendorId || !fuelType || !requestorName.trim()) {
@@ -323,11 +365,13 @@ export function RequestsPage() {
         notes,
         requestor_name: requestorName.trim(),
         settlement_type: settlementType,
+        ...(unitPrice > 0 ? { unit_price: unitPrice } : {}),
       });
       setSuccess("Request submitted.");
       setVehicleId("");
       setVendorId("");
       setQuantity(0);
+      setUnitPrice(0);
       setNotes("");
       setRequestorName("");
       setSettlementType("vendor_invoice");
@@ -438,6 +482,16 @@ export function RequestsPage() {
             </>
           )}
 
+          <label>Unit price (₱/liter)</label>
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            value={unitPrice > 0 ? unitPrice : ""}
+            onChange={(e) => setUnitPrice(Number(e.target.value))}
+            placeholder="Optional — from current vendor price"
+          />
+
           <label>Requestor</label>
           <input
             value={requestorName}
@@ -499,7 +553,7 @@ export function RequestsPage() {
                     <th>Vendor</th>
                     <th>Total</th>
                     <th>Status</th>
-                    <th>Date</th>
+                    <th>Requested</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -512,9 +566,9 @@ export function RequestsPage() {
                       <td>{req.vendor_name ?? "—"}</td>
                       <td>{formatPeso(req.total_price)}</td>
                       <td>{req.status}</td>
-                      <td>{req.created_at?.slice(0, 10)}</td>
+                      <td>{formatRequestDate(req.created_at)}</td>
                       <td className="actions">
-                        {isSuperuser ? (
+                        {canAdminEdit ? (
                           <button type="button" onClick={() => setAdminEditing(req)}>
                             Admin Edit
                           </button>
@@ -526,6 +580,15 @@ export function RequestsPage() {
                           <span className="muted">
                             {req.is_edited ? "Edited" : req.status !== "pending" ? "Locked" : "—"}
                           </span>
+                        )}
+                        {isSuperuser && canAdminCancelStatus(req.status) && (
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => setCancelTarget(req)}
+                          >
+                            Cancel
+                          </button>
                         )}
                       </td>
                     </tr>
@@ -541,6 +604,7 @@ export function RequestsPage() {
         <EditRequestForm
           req={editing}
           context={context}
+          fuelPrices={fuelPrices}
           onSaved={() => {
             setEditing(null);
             loadData();
@@ -558,6 +622,18 @@ export function RequestsPage() {
             loadData();
           }}
           onCancel={() => setAdminEditing(null)}
+        />
+      )}
+
+      {cancelTarget && isSuperuser && (
+        <CancelApprovedDialog
+          req={cancelTarget}
+          onCancel={async (reason) => {
+            await requisitionsApi.adminCancelRequisition(cancelTarget.id, reason);
+            setCancelTarget(null);
+            await loadData();
+          }}
+          onClose={() => setCancelTarget(null)}
         />
       )}
     </div>

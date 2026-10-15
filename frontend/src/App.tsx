@@ -14,7 +14,8 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FuelHomePage } from "./pages/FuelHomePage";
 import { PortalHomePage } from "./pages/PortalHomePage";
 import { ComingSoonModulePage } from "./pages/fleet/ComingSoonModulePage";
-import { VehiclesModulePage } from "./pages/fleet/VehiclesModulePage";
+import { PmsPage } from "./pages/fleet/PmsPage";
+import { RegistrationsPage } from "./pages/fleet/RegistrationsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MasterDataPage } from "./pages/MasterDataPage";
 import { PurchasingLayout } from "./pages/purchasing/PurchasingLayout";
@@ -28,6 +29,8 @@ import { EncoderReleasedPage } from "./pages/encoder/EncoderReleasedPage";
 import { EncoderCcFillsPage } from "./pages/encoder/EncoderCcFillsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { RequestsPage } from "./pages/RequestsPage";
+import { InsuranceRoute } from "./routes/InsuranceRoute";
+import { PmsRoute } from "./routes/PmsRoute";
 import { ProtectedRoute } from "./routes/ProtectedRoute";
 import { RoleRoute } from "./routes/RoleRoute";
 
@@ -40,32 +43,14 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<PortalLayout />}>
               <Route path="/" element={<PortalHomePage />} />
-              <Route
-                path="/fleet/vehicles"
-                element={
-                  <RoleRoute
-                    allowedRoles={["approver", "purchaser", "accounting", "superuser"]}
-                  >
-                    <VehiclesModulePage />
-                  </RoleRoute>
-                }
-              />
-              <Route
-                path="/fleet/registrations"
-                element={
-                  <ComingSoonModulePage
-                    title="Registrations / Renewal"
-                    description="OR/CR renewals, LTO dates, and expiry alerts."
-                  />
-                }
-              />
+              <Route path="/fleet/vehicles" element={<Navigate to="/master-data" replace />} />
+              <Route path="/fleet/registrations" element={<RegistrationsPage />} />
               <Route
                 path="/fleet/pms"
                 element={
-                  <ComingSoonModulePage
-                    title="PMS"
-                    description="Preventive maintenance schedules and due work."
-                  />
+                  <PmsRoute>
+                    <PmsPage />
+                  </PmsRoute>
                 }
               />
               <Route
@@ -80,10 +65,12 @@ export default function App() {
               <Route
                 path="/fleet/insurance"
                 element={
-                  <ComingSoonModulePage
-                    title="Insurance"
-                    description="Policies, expiry tracking, and claims."
-                  />
+                  <InsuranceRoute>
+                    <ComingSoonModulePage
+                      title="Insurance"
+                      description="Policies, expiry tracking, and claims."
+                    />
+                  </InsuranceRoute>
                 }
               />
             </Route>

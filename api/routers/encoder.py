@@ -3,18 +3,14 @@ from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.core.dependencies import get_current_user, get_db_path, require_roles
+from api.core.access import EncodeCcFillUser, EncodeReceiptUser, EncoderUser
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.cc_fill import RecordCcFillRequest
 from api.schemas.receiving import ReceiveRequest
 from api.services import encoder_service
 
 router = APIRouter(prefix="/encoder", tags=["encoder"])
-
-EncoderUser = Annotated[
-    dict,
-    Depends(require_roles("encoder", "user")),
-]
 
 
 def _err(error: Exception) -> HTTPException:
@@ -37,7 +33,7 @@ def encoder_counts_route(
 @router.get("/released")
 def list_released_route(
     db_path: Annotated[str, Depends(get_db_path)],
-    user: EncoderUser,
+    user: EncodeReceiptUser,
 ) -> List[dict]:
     """Released POs awaiting receipt (company-filtered)."""
     try:
@@ -50,7 +46,7 @@ def list_released_route(
 @router.get("/cc-fills")
 def list_cc_fills_route(
     db_path: Annotated[str, Depends(get_db_path)],
-    user: EncoderUser,
+    user: EncodeCcFillUser,
 ) -> List[dict]:
     """Approved credit card requests awaiting fill (company-filtered)."""
     try:
@@ -65,7 +61,7 @@ def record_receipt_route(
     requisition_id: int,
     payload: ReceiveRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: EncoderUser,
+    user: EncodeReceiptUser,
 ) -> MessageResponse:
     """Record delivery receipt for a released PO (encoder; released only)."""
     try:
@@ -91,7 +87,7 @@ def record_cc_fill_route(
     requisition_id: int,
     payload: RecordCcFillRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: EncoderUser,
+    user: EncodeCcFillUser,
 ) -> MessageResponse:
     """Record credit card fill (approved → paid_cc)."""
     try:

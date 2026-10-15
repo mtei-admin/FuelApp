@@ -26,6 +26,9 @@ def create_vehicle(
     company: str,
     assigned_to: str,
     vendor_id: Optional[int] = None,
+    registration_date: Optional[str] = None,
+    expiration_date: Optional[str] = None,
+    is_company_owned: bool = False,
     actor: Optional[Dict[str, Any]] = None,
 ) -> int:
     """Create or reactivate a vehicle by plate number."""
@@ -42,6 +45,9 @@ def create_vehicle(
         fuel_type,
         company_code,
         assigned_to.strip(),
+        registration_date=registration_date,
+        expiration_date=expiration_date,
+        is_company_owned=is_company_owned,
     )
     created = fetch_car_by_id(db_path, car_id)
     log_audit(
@@ -64,6 +70,9 @@ def save_vehicle(
     company: str,
     assigned_to: str,
     vendor_id: Optional[int] = None,
+    registration_date: Optional[str] = None,
+    expiration_date: Optional[str] = None,
+    is_company_owned: bool = False,
     actor: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Update an existing vehicle."""
@@ -85,6 +94,9 @@ def save_vehicle(
         fuel_type,
         company_code,
         assigned_to.strip(),
+        registration_date=registration_date,
+        expiration_date=expiration_date,
+        is_company_owned=is_company_owned,
     )
     after = fetch_car_by_id(db_path, car_id)
     log_field_update(

@@ -3,18 +3,13 @@ from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.core.dependencies import get_db_path, require_roles
+from api.core.access import MasterDataUser
+from api.core.dependencies import get_db_path
 from api.schemas.auth import MessageResponse
 from api.schemas.company import CompanyCreateRequest, CompanyResponse, CompanyUpdateRequest
 from api.services import company_service
 
 router = APIRouter(prefix="/companies", tags=["companies"])
-
-MasterDataUser = Annotated[
-    dict,
-    Depends(require_roles("approver", "purchaser", "accounting", "superuser")),
-]
-
 
 def _handle_service_error(error: Exception) -> HTTPException:
     """Convert service RuntimeError to HTTP 400."""

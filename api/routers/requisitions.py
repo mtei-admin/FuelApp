@@ -3,8 +3,11 @@ from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.core.dependencies import get_current_user, get_db_path
+from api.core.access import FuelRequestUser, ManageUsersUser
+from api.core.dependencies import get_db_path
+from api.schemas.auth import MessageResponse
 from api.schemas.requisition import (
+    CancelApprovedRequest,
     PriorApprovedResponse,
     RequisitionCreateRequest,
     RequisitionResponse,
@@ -23,7 +26,7 @@ def _handle_service_error(error: Exception) -> HTTPException:
 @router.get("/form-context", response_model=RequestFormContextResponse)
 def get_form_context(
     db_path: Annotated[str, Depends(get_db_path)],
-    user: Annotated[dict, Depends(get_current_user)],
+    user: FuelRequestUser,
 ) -> RequestFormContextResponse:
     """Return vehicles, vendors, and default requestor for the request form."""
     ctx = requisition_service.get_form_context(db_path, user["id"])
@@ -34,7 +37,7 @@ def get_form_context(
 def get_prior_approved(
     vehicle_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: Annotated[dict, Depends(get_current_user)],
+    user: FuelRequestUser,
 ) -> PriorApprovedResponse:
     """Return prior approved requests for a vehicle (last 2 days)."""
     requests = requisition_service.get_prior_approved(db_path, vehicle_id)
@@ -44,13 +47,11 @@ def get_prior_approved(
 @router.get("", response_model=List[RequisitionResponse])
 def list_my_requisitions(
     db_path: Annotated[str, Depends(get_db_path)],
-    user: Annotated[dict, Depends(get_current_user)],
+    user: FuelRequestUser,
 ) -> List[RequisitionResponse]:
     """List requisitions submitted by the current user."""
     try:
-        rows = requisition_service.list_user_requisitions(
-            db_path, user["id"], user["role"]
-        )
+        rows = requisition_service.list_user_requisitions(db_path, user["id"], user)
         return [RequisitionResponse(**row) for row in rows]
     except RuntimeError as error:
         raise _handle_service_error(error) from error
@@ -60,12 +61,10 @@ def list_my_requisitions(
 def get_requisition(
     requisition_id: int,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: Annotated[dict, Depends(get_current_user)],
+    user: FuelRequestUser,
 ) -> RequisitionResponse:
     """Fetch a single requisition owned by or editable by the user."""
-    row = requisition_service.get_requisition(
-        db_path, requisition_id, user["id"], user["role"]
-    )
+    row = requisition_service.get_requisition(db_path, requisition_id, user["id"], user)
     if not row:
         raise HTTPException(status_code=404, detail="Requisition not found")
     return RequisitionResponse(**row)
@@ -75,7 +74,7 @@ def get_requisition(
 def create_requisition(
     payload: RequisitionCreateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: Annotated[dict, Depends(get_current_user)],
+    user: FuelRequestUser,
 ) -> RequisitionResponse:
     """Submit a new fuel requisition."""
     try:
@@ -91,10 +90,9 @@ def create_requisition(
             requestor_name=payload.requestor_name,
             settlement_type=payload.settlement_type,
             actor=user,
+            unit_price=payload.unit_price,
         )
-        row = requisition_service.get_requisition(
-            db_path, req_id, user["id"], user["role"]
-        )
+        row = requisition_service.get_requisition(db_path, req_id, user["id"], user)
         if not row:
             raise HTTPException(status_code=500, detail="Requisition created but not found")
         return RequisitionResponse(**row)
@@ -107,15 +105,15 @@ def update_requisition_route(
     requisition_id: int,
     payload: RequisitionUpdateRequest,
     db_path: Annotated[str, Depends(get_db_path)],
-    user: Annotated[dict, Depends(get_current_user)],
+    user: FuelRequestUser,
 ) -> RequisitionResponse:
-    """Update a pending requisition (one-time edit rules apply; superuser: any status)."""
+    """Update a pending requisition (one-time edit rules apply; override permission: any status)."""
     try:
         requisition_service.save_requisition(
             db_path,
             requisition_id,
             user["id"],
-            user["role"],
+            user,
             payload.vehicle_id,
             payload.vendor_id,
             payload.fuel_type,
@@ -124,12 +122,34 @@ def update_requisition_route(
             payload.notes,
             settlement_type=payload.settlement_type,
             actor=user,
+            unit_price=payload.unit_price,
         )
         row = requisition_service.get_requisition(
-            db_path, requisition_id, user["id"], user["role"]
+            db_path, requisition_id, user["id"], user
         )
         if not row:
             raise HTTPException(status_code=404, detail="Requisition not found")
         return RequisitionResponse(**row)
+    except RuntimeError as error:
+        raise _handle_service_error(error) from error
+
+
+@router.post("/{requisition_id}/admin-cancel", response_model=MessageResponse)
+def admin_cancel_route(
+    requisition_id: int,
+    payload: CancelApprovedRequest,
+    db_path: Annotated[str, Depends(get_db_path)],
+    user: ManageUsersUser,
+) -> MessageResponse:
+    """Cancel a request from pending through received (superuser only)."""
+    try:
+        requisition_service.admin_cancel(
+            db_path,
+            requisition_id,
+            user["id"],
+            payload.reason,
+            actor=user,
+        )
+        return MessageResponse(message="Request cancelled")
     except RuntimeError as error:
         raise _handle_service_error(error) from error

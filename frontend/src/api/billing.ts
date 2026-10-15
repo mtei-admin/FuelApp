@@ -26,6 +26,8 @@ export interface BillingItem {
   cc_reconciled_by?: string | null;
   invoice_number?: string | null;
   settlement_type?: string;
+  created_at?: string | null;
+  po_created_at?: string | null;
 }
 
 export interface BilledSummary {

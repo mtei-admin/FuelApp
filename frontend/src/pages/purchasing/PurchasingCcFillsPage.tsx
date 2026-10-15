@@ -9,13 +9,14 @@ import { usePurchasingQueue, getPurchasingError } from "../../context/Purchasing
 import { useAuth } from "../../context/AuthContext";
 import { usePurchasingSectionReload } from "../../hooks/usePurchasingSectionReload";
 import { formatQuantity } from "../../utils/format";
-import { canManageUsers } from "../../utils/roles";
+import { formatRequestDate } from "../../utils/requisitionDates";
+import { canPurchasingAdminEdit } from "../../utils/roles";
 import type { SettlementType } from "../../utils/settlement";
 import { notifyPurchasingQueuesChanged } from "../../utils/purchasingEvents";
 
 export function PurchasingCcFillsPage() {
   const { user } = useAuth();
-  const isSuperuser = canManageUsers(user?.role);
+  const canAdminEdit = canPurchasingAdminEdit(user);
   const { setCcFillTarget, setAdminEditTarget, setError } = usePurchasingQueue();
   const [items, setItems] = useState<PurchasingRequisition[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,6 +63,7 @@ export function PurchasingCcFillsPage() {
             <thead>
               <tr>
                 <th>Request #</th>
+                <th>Requested</th>
                 <th>Vehicle / Vendor</th>
                 <th>Fuel Type</th>
                 <th>Qty</th>
@@ -73,6 +75,7 @@ export function PurchasingCcFillsPage() {
               {sorted.map((req) => (
                 <tr key={req.id}>
                   <td>{req.serial_number}</td>
+                  <td>{formatRequestDate(req.created_at)}</td>
                   <td>
                     {req.plate_number} — {req.vendor_name}
                   </td>
@@ -93,7 +96,7 @@ export function PurchasingCcFillsPage() {
                     <button type="button" onClick={() => setCcFillTarget(req)}>
                       Record Fill
                     </button>
-                    {isSuperuser && (
+                    {canAdminEdit && (
                       <button
                         type="button"
                         className="secondary"

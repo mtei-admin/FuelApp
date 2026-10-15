@@ -12,9 +12,10 @@ def get_audit_entries(
     entity_type: Optional[str] = None,
     entity_id: Optional[int] = None,
     limit: int = 100,
+    q: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Return audit log rows newest first with entity_label populated."""
-    rows = list_audit_log(db_path, entity_type, entity_id, limit)
+    rows = list_audit_log(db_path, entity_type, entity_id, limit, q=q)
     labels = _resolve_entity_labels(db_path, rows)
     for row in rows:
         key = (row["entity_type"], row["entity_id"])
@@ -36,6 +37,8 @@ def _label_from_row_snapshots(row: Dict[str, Any]) -> Optional[str]:
             return str(source["plate_number"])
         if entity_type == "user" and source.get("username"):
             return str(source["username"])
+        if entity_type == "service_center" and source.get("name"):
+            return str(source["name"])
     return None
 
 
@@ -111,6 +114,17 @@ def _resolve_entity_labels(
                 for vendor_id in ids_by_type.get("fuel_price", set()):
                     if vendor_id in vendor_names:
                         labels[("fuel_price", vendor_id)] = vendor_names[vendor_id]
+
+            center_ids = ids_by_type.get("service_center", set())
+            if center_ids:
+                placeholders = ",".join("?" for _ in center_ids)
+                cursor = connection.execute(
+                    f"SELECT id, name FROM service_centers WHERE id IN ({placeholders})",
+                    list(center_ids),
+                )
+                for row in cursor.fetchall():
+                    name = (row[1] or "").strip()
+                    labels[("service_center", int(row[0]))] = name or f"service-center-{row[0]}"
     except Exception:
         return labels
 
